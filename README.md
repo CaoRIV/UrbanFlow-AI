@@ -1,0 +1,30 @@
+# UrbanFlow AI — bộ tài liệu khởi động
+
+Mục tiêu: ứng dụng dự báo **số lượt đón khách Yellow Taxi trong giờ kế tiếp theo taxi zone tại NYC**, có API và dashboard để trình bày trong CV. Bộ tài liệu này là kế hoạch và quy ước để bắt đầu repo; chưa phải ứng dụng đã triển khai.
+
+## Đọc theo thứ tự
+
+1. [PROJECT_SPEC.md](PROJECT_SPEC.md): mục tiêu, phạm vi, định nghĩa dự báo và tiêu chí hoàn thành.
+2. [ROADMAP_6_WEEKS.md](ROADMAP_6_WEEKS.md): đầu việc từng tuần, đầu ra và cổng kiểm tra; có lịch rút xuống 4 tuần.
+3. [DATA_AND_EVALUATION.md](DATA_AND_EVALUATION.md): nguồn dữ liệu, pipeline, chống rò rỉ dữ liệu và chỉ số.
+4. [AGENTS.md](AGENTS.md): hướng dẫn đặt vào gốc repo để Codex/agent đọc.
+5. [AI_WORKFLOW.md](AI_WORKFLOW.md): cách dùng Codex, OMP và Orca theo từng phiên làm việc, mẫu prompt và bàn giao.
+6. [TASK_BOARD.md](TASK_BOARD.md): danh sách task có thể giao ngay cho agent và mẫu báo cáo.
+
+## Chọn cấu hình ban đầu
+
+- Máy mục tiêu: Core i5, RAM 8GB, SSD 512GB; chạy CPU và chỉ một tác vụ nặng mỗi lần.
+- V1: 3 tháng Yellow Taxi liên tiếp đã phát hành, một lần lấy dữ liệu theo tháng rồi tổng hợp thành `zone × hour`; dùng DuckDB hoặc Polars lazy để tránh nạp toàn bộ raw vào RAM.
+- Mô hình: seasonal naive (cùng zone, cùng giờ tuần trước) → histogram gradient boosting hoặc XGBoost CPU nhỏ. Không cam kết model mới sẽ thắng baseline.
+- API: FastAPI; UI: Vue nếu đã quen, bảng và biểu đồ trước; dữ liệu phục vụ có thể đọc từ Parquet/SQLite. Không cần Docker, PostgreSQL/PostGIS, MLflow để hoàn thành V1.
+- Nếu tháng thứ ba chưa có dữ liệu hoặc chất lượng kém, chọn ba tháng liên tiếp khác và ghi lại lựa chọn trong data card.
+
+## Nguồn tham khảo chính
+
+- [NYC TLC Trip Record Data](https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page): bản Parquet, taxi zone lookup, hướng dẫn nguồn và các lưu ý chất lượng.
+- [NYC TLC Yellow Taxi Data Dictionary](https://www.nyc.gov/assets/tlc/downloads/pdf/data_dictionary_trip_records_yellow.pdf): trường pickup time và `PULocationID`.
+- [NYC Open Data Taxi Zones](https://data.cityofnewyork.us/Transportation/NYC-Taxi-Zones/8meu-9t5y): hình học zone cho phần bản đồ tùy chọn.
+- [Open-Meteo Historical Weather](https://open-meteo.com/en/docs/historical-weather-api) và [Historical Forecast](https://open-meteo.com/en/docs/historical-forecast-api): chỉ dùng nếu mở rộng weather và phải phân biệt quan trắc lịch sử với dự báo biết trước thời điểm dự đoán.
+- [Orca Docs](https://www.onorca.dev/): IDE chạy các agent CLI trong terminal/worktree.
+
+Các lệnh cài đặt cụ thể cho Codex/OMP/Orca thay đổi theo phiên bản; trong bộ tài liệu chỉ mô tả cách phối hợp độc lập phiên bản. Kiểm tra tài liệu chính thức của phiên bản đang cài trước khi cấu hình.
