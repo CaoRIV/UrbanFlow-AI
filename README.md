@@ -1,15 +1,29 @@
 # UrbanFlow AI — bộ tài liệu khởi động
 
-Mục tiêu: ứng dụng dự báo **số lượt đón khách Yellow Taxi trong giờ kế tiếp theo taxi zone tại NYC**, có API và dashboard để trình bày trong CV. Bộ tài liệu này là kế hoạch và quy ước để bắt đầu repo; chưa phải ứng dụng đã triển khai.
+Mục tiêu: ứng dụng dự báo **số lượt đón khách Yellow Taxi trong giờ kế tiếp theo taxi zone tại NYC**, có API và dashboard để trình bày trong CV. Dự án hiện ở giai đoạn khởi tạo môi trường và pipeline; chưa phải ứng dụng đã triển khai.
+
+## Thiết lập môi trường phát triển
+
+Yêu cầu Python 3.11. Trên PowerShell:
+
+```powershell
+py -3.11 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -e ".[dev]"
+python -m pytest
+```
+
+Smoke test tạo một bảng Arrow nhỏ và xác minh DuckDB aggregate đúng kết quả. Bước này không tải hoặc tạo dữ liệu TLC.
 
 ## Đọc theo thứ tự
 
-1. [PROJECT_SPEC.md](PROJECT_SPEC.md): mục tiêu, phạm vi, định nghĩa dự báo và tiêu chí hoàn thành.
-2. [ROADMAP_6_WEEKS.md](ROADMAP_6_WEEKS.md): đầu việc từng tuần, đầu ra và cổng kiểm tra; có lịch rút xuống 4 tuần.
-3. [DATA_AND_EVALUATION.md](DATA_AND_EVALUATION.md): nguồn dữ liệu, pipeline, chống rò rỉ dữ liệu và chỉ số.
+1. [PROJECT_SPEC.md](docs/PROJECT_SPEC.md): mục tiêu, phạm vi, định nghĩa dự báo và tiêu chí hoàn thành.
+2. [ROADMAP_6_WEEKS.md](docs/ROADMAP_6_WEEKS.md): đầu việc từng tuần, đầu ra và cổng kiểm tra; có lịch rút xuống 4 tuần.
+3. [DATA_AND_EVALUATION.md](docs/DATA_AND_EVALUATION.md): nguồn dữ liệu, pipeline, chống rò rỉ dữ liệu và chỉ số.
 4. [AGENTS.md](AGENTS.md): hướng dẫn đặt vào gốc repo để Codex/agent đọc.
-5. [AI_WORKFLOW.md](AI_WORKFLOW.md): cách dùng Codex, OMP và Orca theo từng phiên làm việc, mẫu prompt và bàn giao.
-6. [TASK_BOARD.md](TASK_BOARD.md): danh sách task có thể giao ngay cho agent và mẫu báo cáo.
+5. [AI_WORKFLOW.md](docs/AI_WORKFLOW.md): cách dùng Codex, OMP và Orca theo từng phiên làm việc, mẫu prompt và bàn giao.
+6. [TASK_BOARD.md](docs/TASK_BOARD.md): danh sách task có thể giao ngay cho agent và mẫu báo cáo.
 
 ## Chọn cấu hình ban đầu
 
