@@ -5,7 +5,7 @@ Quy ước: `[ ]` chưa làm, `[x]` xong sau khi đã kiểm tra. Giao một mã
 ## Tuần 1
 
 - [x] **W1-T1** — Khởi tạo repo, môi trường Python, `.gitignore`, README chạy thử. Xong khi tạo venv, import dependency, test smoke chạy; raw/artifact bị ignore.
-- [ ] **W1-T2** — Viết `docs/data-card.md` và script tải đúng **một** tháng Yellow Taxi + zone lookup từ TLC, lưu URL/size/hash hoặc dấu vết tương đương. Xong khi tải lại được và ghi số hàng/schema.
+- [x] **W1-T2** — Viết `docs/data-card.md` và script tải đúng **một** tháng Yellow Taxi + zone lookup từ TLC, lưu URL/size/hash hoặc dấu vết tương đương. Xong khi tải lại được và ghi số hàng/schema.
 - [ ] **W1-T3** — EDA: null pickup/zone, range ngày, bản ghi ngoài tháng, các zone lạ và thống kê RAM/thời gian. Xong khi có bảng chất lượng và quyết định lọc.
 
 ## Tuần 2
@@ -48,9 +48,19 @@ Vấn đề còn lại / quyết định:
 
 ### W1-T1 — 2026-09-17
 
-- Trạng thái: hoàn thành trên nhánh `main`, chưa commit.
+- Trạng thái: hoàn thành trên nhánh `develop`, commit `5540d82`.
 - Thay đổi: cấu hình Python 3.11, dependency cố định, package `urbanflow`, quy tắc ignore, smoke test DuckDB/Arrow và hướng dẫn cài đặt.
 - Đã chạy: `.venv/Scripts/python.exe -m pytest` — 1 test passed; import `duckdb`, `pyarrow`, `urbanflow` thành công.
 - Phiên bản đã kiểm tra: DuckDB 1.5.5, PyArrow 23.0.1, pytest 9.1.1.
 - Kiểm tra ignore: `.venv/`, `data/raw/`, `data/processed/` và `artifacts/` đều được Git bỏ qua.
 - Vấn đề còn lại: chưa có; W1-T2 chưa bắt đầu.
+
+### W1-T2 — 2026-09-17
+
+- Trạng thái: hoàn thành trên nhánh `develop`, chưa commit.
+- Thay đổi: config nguồn tháng `2026-01`, downloader atomic/idempotent, kiểm tra schema, manifest checksum, data card và hướng dẫn chạy.
+- Đã chạy: `python -m urbanflow.download_data --config configs/data_sources.json`; lần hai trả `cached` cho cả hai file; `python -m pytest` — 3 test passed.
+- Yellow Taxi: 64,165,080 bytes; 3,724,889 raw rows; SHA-256 `8b3933fe6f0d7b6d8826613c0dd724edc680ff7c49e2bd4c7635c05102728637`.
+- Zone lookup: 12,331 bytes; 265 rows; SHA-256 `1a99e105092230f8620f301edcca7f80d3080642ff404d28ed957d3fa222c8ed`.
+- Kiểm tra ignore: Parquet, lookup và manifest dưới `data/raw/` đều được Git bỏ qua.
+- Vấn đề còn lại: timezone, null, out-of-month và zone lạ chưa đánh giá; chuyển sang W1-T3.
