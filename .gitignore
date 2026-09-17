@@ -1,0 +1,36 @@
+# Python environments
+.venv/
+venv/
+
+# Python caches and build outputs
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# Project data and generated artifacts
+data/raw/
+data/processed/
+artifacts/
+.cache/
+
+# Frontend outputs (when the dashboard is added)
+web/node_modules/
+web/dist/
+
+# Editors and operating system
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

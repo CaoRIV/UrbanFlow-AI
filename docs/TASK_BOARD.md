@@ -4,7 +4,7 @@ Quy ước: `[ ]` chưa làm, `[x]` xong sau khi đã kiểm tra. Giao một mã
 
 ## Tuần 1
 
-- [ ] **W1-T1** — Khởi tạo repo, môi trường Python, `.gitignore`, README chạy thử. Xong khi tạo venv, import dependency, test smoke chạy; raw/artifact bị ignore.
+- [x] **W1-T1** — Khởi tạo repo, môi trường Python, `.gitignore`, README chạy thử. Xong khi tạo venv, import dependency, test smoke chạy; raw/artifact bị ignore.
 - [ ] **W1-T2** — Viết `docs/data-card.md` và script tải đúng **một** tháng Yellow Taxi + zone lookup từ TLC, lưu URL/size/hash hoặc dấu vết tương đương. Xong khi tải lại được và ghi số hàng/schema.
 - [ ] **W1-T3** — EDA: null pickup/zone, range ngày, bản ghi ngoài tháng, các zone lạ và thống kê RAM/thời gian. Xong khi có bảng chất lượng và quyết định lọc.
 
@@ -43,3 +43,14 @@ Lệnh đã chạy / kết quả:
 Số liệu thật (nếu có):
 Vấn đề còn lại / quyết định:
 ```
+
+## Nhật ký thực hiện
+
+### W1-T1 — 2026-09-17
+
+- Trạng thái: hoàn thành trên nhánh `main`, chưa commit.
+- Thay đổi: cấu hình Python 3.11, dependency cố định, package `urbanflow`, quy tắc ignore, smoke test DuckDB/Arrow và hướng dẫn cài đặt.
+- Đã chạy: `.venv/Scripts/python.exe -m pytest` — 1 test passed; import `duckdb`, `pyarrow`, `urbanflow` thành công.
+- Phiên bản đã kiểm tra: DuckDB 1.5.5, PyArrow 23.0.1, pytest 9.1.1.
+- Kiểm tra ignore: `.venv/`, `data/raw/`, `data/processed/` và `artifacts/` đều được Git bỏ qua.
+- Vấn đề còn lại: chưa có; W1-T2 chưa bắt đầu.
