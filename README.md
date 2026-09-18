@@ -16,6 +16,16 @@ python -m pytest
 
 Smoke test tạo một bảng Arrow nhỏ và xác minh DuckDB aggregate đúng kết quả. Bước này không tải hoặc tạo dữ liệu TLC.
 
+## Tải dữ liệu thô
+
+Cấu hình W1-T2 chọn đúng một tháng Yellow Taxi cùng taxi zone lookup. Từ repository root:
+
+```powershell
+python -m urbanflow.download_data --config configs/data_sources.json
+```
+
+Raw files và manifest được lưu trong `data/raw/` và không được commit. Downloader xác minh schema, số hàng, kích thước và SHA-256; lần chạy lại dùng file cache nếu checksum còn đúng. Kết quả nguồn và schema thực tế nằm trong [data card](docs/data-card.md).
+
 ## Đọc theo thứ tự
 
 1. [PROJECT_SPEC.md](docs/PROJECT_SPEC.md): mục tiêu, phạm vi, định nghĩa dự báo và tiêu chí hoàn thành.
