@@ -36,9 +36,14 @@ class DownloadError(RuntimeError):
 
 
 @dataclass(frozen=True)
-class DownloadConfig:
+class MonthlyTripSource:
     month: str
-    yellow_taxi_url: str
+    url: str
+
+
+@dataclass(frozen=True)
+class DownloadConfig:
+    months: tuple[MonthlyTripSource, ...]
     zone_lookup_url: str
     raw_dir: Path
     manifest_path: Path
@@ -77,22 +82,41 @@ def load_config(config_path: Path) -> DownloadConfig:
     if not isinstance(data, dict):
         raise ConfigError("config root must be a JSON object")
 
-    month = _required_string(data, "month")
-    if not _MONTH_PATTERN.fullmatch(month):
-        raise ConfigError("month must use YYYY-MM with a valid month number")
+    month_items = data.get("months")
+    if not isinstance(month_items, list) or not month_items:
+        raise ConfigError("months must be a non-empty array")
+
+    monthly_sources: list[MonthlyTripSource] = []
+    seen_months: set[str] = set()
+    for index, item in enumerate(month_items):
+        if not isinstance(item, dict):
+            raise ConfigError(f"months[{index}] must be an object")
+        month = _required_string(item, "month")
+        if not _MONTH_PATTERN.fullmatch(month):
+            raise ConfigError(
+                f"months[{index}].month must use YYYY-MM with a valid month number"
+            )
+        if month in seen_months:
+            raise ConfigError(f"duplicate configured month: {month}")
+        seen_months.add(month)
+
+        url = _required_string(item, "url")
+        expected_filename = f"yellow_tripdata_{month}.parquet"
+        filename = Path(unquote(urlparse(url).path)).name
+        if filename != expected_filename:
+            raise ConfigError(
+                f"months[{index}].url must end with {expected_filename}; "
+                f"got {filename or '<empty>'}"
+            )
+        monthly_sources.append(MonthlyTripSource(month=month, url=url))
+
+    configured_order = [source.month for source in monthly_sources]
+    if configured_order != sorted(configured_order):
+        raise ConfigError("months must be ordered chronologically")
 
     timeout_seconds = data.get("timeout_seconds", 60)
     if not isinstance(timeout_seconds, int) or timeout_seconds <= 0:
         raise ConfigError("timeout_seconds must be a positive integer")
-
-    yellow_taxi_url = _required_string(data, "yellow_taxi_url")
-    expected_trip_filename = f"yellow_tripdata_{month}.parquet"
-    trip_filename = Path(unquote(urlparse(yellow_taxi_url).path)).name
-    if trip_filename != expected_trip_filename:
-        raise ConfigError(
-            "yellow_taxi_url filename must match configured month: "
-            f"expected {expected_trip_filename}, got {trip_filename or '<empty>'}"
-        )
 
     zone_lookup_url = _required_string(data, "zone_lookup_url")
     zone_filename = Path(unquote(urlparse(zone_lookup_url).path)).name
@@ -108,8 +132,7 @@ def load_config(config_path: Path) -> DownloadConfig:
     ).resolve()
 
     return DownloadConfig(
-        month=month,
-        yellow_taxi_url=yellow_taxi_url,
+        months=tuple(monthly_sources),
         zone_lookup_url=zone_lookup_url,
         raw_dir=raw_dir,
         manifest_path=manifest_path,
@@ -117,28 +140,27 @@ def load_config(config_path: Path) -> DownloadConfig:
     )
 
 
-def _resource_specs(config: DownloadConfig) -> tuple[ResourceSpec, ResourceSpec]:
-    return (
+def _resource_specs(config: DownloadConfig) -> tuple[ResourceSpec, ...]:
+    trip_specs = tuple(
         ResourceSpec(
-            key="yellow_taxi",
-            url=config.yellow_taxi_url,
-            destination=config.raw_dir
-            / f"yellow_tripdata_{config.month}.parquet",
+            key=f"yellow_taxi_{source.month}",
+            url=source.url,
+            destination=config.raw_dir / f"yellow_tripdata_{source.month}.parquet",
             format="parquet",
             required_columns=frozenset({"tpep_pickup_datetime", "PULocationID"}),
-        ),
-        ResourceSpec(
-            key="taxi_zone_lookup",
-            url=config.zone_lookup_url,
-            destination=config.raw_dir / "taxi_zone_lookup.csv",
-            format="csv",
-            required_columns=frozenset(
-                {"LocationID", "Borough", "Zone", "service_zone"}
-            ),
+        )
+        for source in config.months
+    )
+    zone_spec = ResourceSpec(
+        key="taxi_zone_lookup",
+        url=config.zone_lookup_url,
+        destination=config.raw_dir / "taxi_zone_lookup.csv",
+        format="csv",
+        required_columns=frozenset(
+            {"LocationID", "Borough", "Zone", "service_zone"}
         ),
     )
-
-
+    return (*trip_specs, zone_spec)
 def _schema_metadata(schema: pa.Schema) -> list[dict[str, Any]]:
     return [
         {
@@ -200,7 +222,7 @@ def _load_manifest(path: Path) -> dict[str, Any] | None:
 def _cached_entry(
     spec: ResourceSpec, manifest: dict[str, Any] | None
 ) -> dict[str, Any] | None:
-    if manifest is None or manifest.get("manifest_version") != 1:
+    if manifest is None or manifest.get("manifest_version") not in {1, 2}:
         return None
 
     files = manifest.get("files")
@@ -221,6 +243,23 @@ def _cached_entry(
     if _sha256(spec.destination) != expected_sha256:
         return None
     return entry
+
+def _existing_file_entry(spec: ResourceSpec) -> dict[str, Any] | None:
+    if not spec.destination.is_file():
+        return None
+    try:
+        inspection = _inspect_file(spec, spec.destination)
+    except DataContractError:
+        return None
+    return {
+        "url": spec.url,
+        "path": spec.destination.as_posix(),
+        "verified_at_utc": _utc_now(),
+        "bytes": spec.destination.stat().st_size,
+        "sha256": _sha256(spec.destination),
+        **inspection,
+    }
+
 
 
 def _download_resource(
@@ -289,17 +328,21 @@ def run_download(config_path: Path) -> dict[str, Any]:
 
     for spec in _resource_specs(config):
         entry = _cached_entry(spec, previous_manifest)
-        if entry is None:
-            entry = _download_resource(spec, config.timeout_seconds)
-            statuses[spec.key] = "downloaded"
-            changed = True
-        else:
+        if entry is not None:
             statuses[spec.key] = "cached"
+        else:
+            entry = _existing_file_entry(spec)
+            if entry is not None:
+                statuses[spec.key] = "verified_existing"
+            else:
+                entry = _download_resource(spec, config.timeout_seconds)
+                statuses[spec.key] = "downloaded"
+            changed = True
         manifest_files[spec.key] = entry
 
     manifest = {
-        "manifest_version": 1,
-        "month": config.month,
+        "manifest_version": 2,
+        "months": [source.month for source in config.months],
         "recorded_at_utc": _utc_now(),
         "files": manifest_files,
     }
@@ -307,7 +350,7 @@ def run_download(config_path: Path) -> dict[str, Any]:
         _write_manifest(config.manifest_path, manifest)
 
     return {
-        "month": config.month,
+        "months": [source.month for source in config.months],
         "manifest_path": config.manifest_path.as_posix(),
         "files": {
             key: {"status": statuses[key], **entry}
@@ -318,7 +361,7 @@ def run_download(config_path: Path) -> dict[str, Any]:
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Download and validate one month of NYC TLC Yellow Taxi data."
+        description="Download and validate one or more NYC TLC Yellow Taxi months."
     )
     parser.add_argument(
         "--config",

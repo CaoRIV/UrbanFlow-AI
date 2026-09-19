@@ -15,8 +15,7 @@ def _write_configs(root: Path, trip_url: str, zone_url: str) -> Path:
     source_config.write_text(
         json.dumps(
             {
-                "month": "2026-01",
-                "yellow_taxi_url": trip_url,
+                "months": [{"month": "2026-01", "url": trip_url}],
                 "zone_lookup_url": zone_url,
                 "raw_dir": "raw",
                 "manifest_path": "raw/download_manifest.json",
@@ -30,6 +29,7 @@ def _write_configs(root: Path, trip_url: str, zone_url: str) -> Path:
         json.dumps(
             {
                 "source_config": "data_sources.json",
+                "month": "2026-01",
                 "output_path": "artifacts/quality.json",
                 "timezone_assumption": "America/New_York",
                 "duckdb_threads": 1,
@@ -39,7 +39,6 @@ def _write_configs(root: Path, trip_url: str, zone_url: str) -> Path:
         encoding="utf-8",
     )
     return inspection_config
-
 
 def test_inspection_reports_quality_and_filter_decisions(tmp_path: Path) -> None:
     raw_dir = tmp_path / "raw"

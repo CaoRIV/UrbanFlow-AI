@@ -16,8 +16,7 @@ def _write_config(root: Path, trip_url: str, zone_url: str) -> Path:
     config_path.write_text(
         json.dumps(
             {
-                "month": "2026-01",
-                "yellow_taxi_url": trip_url,
+                "months": [{"month": "2026-01", "url": trip_url}],
                 "zone_lookup_url": zone_url,
                 "raw_dir": "raw",
                 "manifest_path": "raw/download_manifest.json",
@@ -27,7 +26,6 @@ def _write_config(root: Path, trip_url: str, zone_url: str) -> Path:
         encoding="utf-8",
     )
     return config_path
-
 
 def _write_zone_lookup(path: Path) -> None:
     path.write_text(
@@ -63,10 +61,11 @@ def test_download_is_idempotent_and_records_file_contract(tmp_path: Path) -> Non
     first_modified_at = downloaded_trip.stat().st_mtime_ns
     second_result = run_download(config_path)
 
-    assert first_result["files"]["yellow_taxi"]["status"] == "downloaded"
-    assert first_result["files"]["yellow_taxi"]["rows"] == 1
+    trip_key = "yellow_taxi_2026-01"
+    assert first_result["files"][trip_key]["status"] == "downloaded"
+    assert first_result["files"][trip_key]["rows"] == 1
     assert first_result["files"]["taxi_zone_lookup"]["rows"] == 2
-    assert second_result["files"]["yellow_taxi"]["status"] == "cached"
+    assert second_result["files"][trip_key]["status"] == "cached"
     assert second_result["files"]["taxi_zone_lookup"]["status"] == "cached"
     assert downloaded_trip.stat().st_mtime_ns == first_modified_at
 
@@ -75,8 +74,10 @@ def test_download_is_idempotent_and_records_file_contract(tmp_path: Path) -> Non
             encoding="utf-8"
         )
     )
-    assert manifest["files"]["yellow_taxi"]["sha256"]
-    assert {field["name"] for field in manifest["files"]["yellow_taxi"]["schema"]} >= {
+    assert manifest["manifest_version"] == 2
+    assert manifest["months"] == ["2026-01"]
+    assert manifest["files"][trip_key]["sha256"]
+    assert {field["name"] for field in manifest["files"][trip_key]["schema"]} >= {
         "tpep_pickup_datetime",
         "PULocationID",
     }
