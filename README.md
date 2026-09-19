@@ -26,6 +26,14 @@ python -m urbanflow.download_data --config configs/data_sources.json
 
 Raw files và manifest được lưu trong `data/raw/` và không được commit. Downloader xác minh schema, số hàng, kích thước và SHA-256; lần chạy lại dùng file cache nếu checksum còn đúng. Kết quả nguồn và schema thực tế nằm trong [data card](docs/data-card.md).
 
+Kiểm tra chất lượng tháng đã tải mà không nạp toàn bộ cột vào RAM:
+
+```powershell
+python -m urbanflow.inspect_data --config configs/eda.json
+```
+
+Kết quả machine-readable nằm trong `artifacts/eda/`; bảng số liệu và quyết định lọc được lưu trong [data card](docs/data-card.md).
+
 ## Đọc theo thứ tự
 
 1. [PROJECT_SPEC.md](docs/PROJECT_SPEC.md): mục tiêu, phạm vi, định nghĩa dự báo và tiêu chí hoàn thành.
