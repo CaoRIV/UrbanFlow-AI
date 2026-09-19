@@ -10,7 +10,7 @@ Quy ước: `[ ]` chưa làm, `[x]` xong sau khi đã kiểm tra. Giao một mã
 
 ## Tuần 2
 
-- [ ] **W2-T1** — Tải thêm tháng thứ hai, ba; scan chỉ cột cần, aggregate theo UTC hour và zone. Xong khi pipeline tái chạy được và không đọc mọi cột vào RAM.
+- [x] **W2-T1** — Tải thêm tháng thứ hai, ba; scan chỉ cột cần, aggregate theo UTC hour và zone. Xong khi pipeline tái chạy được và không đọc mọi cột vào RAM.
 - [ ] **W2-T2** — Dựng full hourly grid, phân biệt zero thật với khoảng nguồn thiếu và xử lý DST; test toy. Xong khi khóa chính `zone_id,target_hour_utc` duy nhất.
 - [ ] **W2-T3** — Split time và seasonal naive; ghi MAE/WAPE, số hàng/số zone mỗi split. Xong khi có baseline lưu file và config split.
 
@@ -67,10 +67,21 @@ Vấn đề còn lại / quyết định:
 
 ### W1-T3 — 2026-09-19
 
-- Trạng thái: hoàn thành trên nhánh `develop`, chưa commit.
+- Trạng thái: hoàn thành trên nhánh `develop`, commit `cb46ea2`.
 - Thay đổi: config EDA, DuckDB scan đúng hai cột, kiểm tra timestamp/zone/hourly coverage, đo RSS, báo cáo JSON và data card có quyết định lọc.
 - Đã chạy: `python -m urbanflow.inspect_data --config configs/eda.json`; stdout là JSON hợp lệ; `python -m pytest` — 4 test passed; `pip check` không có dependency lỗi.
 - Kết quả: 3,724,889 raw rows; 7 rows ngoài tháng; 0 null; 5,930 rows thuộc zone 264/265; giữ 3,718,952 rows thuộc 260 zone hợp lệ; đủ 744/744 giờ.
 - Tài nguyên lần xác minh cuối: 6.824 giây, RSS đỉnh 78,860,288 bytes, DuckDB 2 threads và memory limit 1 GB.
 - Quyết định: diễn giải timestamp nguồn là local wall time `America/New_York`; loại null, ngoài tháng, zone ngoài lookup và zone 264/265; kiểm tra DST lại khi tải tháng 3.
 - Vấn đề còn lại: chưa aggregate hoặc tạo label; chuyển sang W2-T1.
+
+### W2-T1 — 2026-09-19
+
+- Trạng thái: hoàn thành trên nhánh `develop`, chưa commit.
+- Thay đổi: downloader clean cutover sang danh sách tháng; tải đủ Q1/2026; lọc trip theo data contract; nhận diện DST; aggregate từng tháng thành observed `zone_id × target_hour_utc` Parquet.
+- Đã chạy: downloader lần hai trả `cached` cho toàn bộ raw files; aggregate hai lần cho cùng SHA-256; `python -m pytest` — 6 test passed; `pip check` không có dependency lỗi.
+- Dữ liệu: 11,077,206 raw rows; loại 17,242; giữ 11,059,964 trips; tạo 355,604 observed hourly rows; không có khóa trùng.
+- DST: nhận diện local gap `2026-03-08T02:00:00–03:00:00`, raw có 0 rows trong gap; output UTC timezone-aware.
+- Tài nguyên lần chạy ghi nhận: 6.737–8.777 giây/tháng; RSS đỉnh lớn nhất 86,032,384 bytes; DuckDB 2 threads, memory limit 1 GB.
+- Invariant: tổng `trip_count` bằng số trips giữ lại cho từng tháng và toàn bộ ba tháng.
+- Vấn đề còn lại: output chưa có zero rows hoặc source-missing markers; chuyển sang W2-T2.

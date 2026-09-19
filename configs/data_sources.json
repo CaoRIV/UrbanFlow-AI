@@ -1,6 +1,18 @@
 {
-  "month": "2026-01",
-  "yellow_taxi_url": "https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2026-01.parquet",
+  "months": [
+    {
+      "month": "2026-01",
+      "url": "https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2026-01.parquet"
+    },
+    {
+      "month": "2026-02",
+      "url": "https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2026-02.parquet"
+    },
+    {
+      "month": "2026-03",
+      "url": "https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2026-03.parquet"
+    }
+  ],
   "zone_lookup_url": "https://d37ci6vzurychx.cloudfront.net/misc/taxi_zone_lookup.csv",
   "raw_dir": "../data/raw",
   "manifest_path": "../data/raw/download_manifest.json",

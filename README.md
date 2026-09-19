@@ -18,7 +18,7 @@ Smoke test tạo một bảng Arrow nhỏ và xác minh DuckDB aggregate đúng 
 
 ## Tải dữ liệu thô
 
-Cấu hình W1-T2 chọn đúng một tháng Yellow Taxi cùng taxi zone lookup. Từ repository root:
+Cấu hình W2-T1 chọn ba tháng Yellow Taxi liên tiếp cùng taxi zone lookup. Từ repository root:
 
 ```powershell
 python -m urbanflow.download_data --config configs/data_sources.json
@@ -33,6 +33,14 @@ python -m urbanflow.inspect_data --config configs/eda.json
 ```
 
 Kết quả machine-readable nằm trong `artifacts/eda/`; bảng số liệu và quyết định lọc được lưu trong [data card](docs/data-card.md).
+
+Aggregate từng tháng thành observed hourly counts theo UTC:
+
+```powershell
+python -m urbanflow.aggregate_hourly --config configs/aggregate.json
+```
+
+Pipeline chỉ scan pickup timestamp và pickup zone, áp dụng lọc đã ghi trong data card, xử lý DST trước khi đổi UTC, rồi ghi Parquet theo tháng vào `data/processed/hourly_counts_observed/`. Đây chưa phải full grid; zero và source-missing được xử lý trong W2-T2.
 
 ## Đọc theo thứ tự
 

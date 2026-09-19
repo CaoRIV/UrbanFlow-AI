@@ -40,6 +40,7 @@ class InspectionInputError(ValueError):
 @dataclass(frozen=True)
 class InspectionConfig:
     source_config_path: Path
+    month: str
     output_path: Path
     timezone_assumption: str
     duckdb_threads: int
@@ -90,6 +91,7 @@ def load_inspection_config(config_path: Path) -> InspectionConfig:
         source_config_path=(
             base_dir / _required_string(data, "source_config")
         ).resolve(),
+        month=_required_string(data, "month"),
         output_path=(base_dir / _required_string(data, "output_path")).resolve(),
         timezone_assumption=timezone_assumption,
         duckdb_threads=threads,
@@ -106,8 +108,15 @@ def _month_bounds(month: str) -> tuple[datetime, datetime]:
     return start, end
 
 
-def _validate_inputs(source_config: DownloadConfig) -> tuple[Path, Path]:
-    trip_path = source_config.raw_dir / f"yellow_tripdata_{source_config.month}.parquet"
+def _validate_inputs(
+    source_config: DownloadConfig, month: str
+) -> tuple[Path, Path]:
+    configured_months = {source.month for source in source_config.months}
+    if month not in configured_months:
+        raise InspectionInputError(
+            f"inspection month {month} is not present in the source config"
+        )
+    trip_path = source_config.raw_dir / f"yellow_tripdata_{month}.parquet"
     zone_path = source_config.raw_dir / "taxi_zone_lookup.csv"
     missing = [str(path) for path in (trip_path, zone_path) if not path.is_file()]
     if missing:
@@ -342,8 +351,8 @@ def _write_json(path: Path, report: dict[str, Any]) -> None:
 def run_inspection(config_path: Path) -> dict[str, Any]:
     config = load_inspection_config(config_path)
     source_config = load_config(config.source_config_path)
-    trip_path, zone_path = _validate_inputs(source_config)
-    start, end = _month_bounds(source_config.month)
+    trip_path, zone_path = _validate_inputs(source_config, config.month)
+    start, end = _month_bounds(config.month)
 
     rss_start, rss_peak, stop_sampling, sampling_thread = _start_rss_sampler()
     started_at = time.perf_counter()
@@ -371,7 +380,7 @@ def run_inspection(config_path: Path) -> dict[str, Any]:
         .isoformat()
         .replace("+00:00", "Z"),
         "source": {
-            "month": source_config.month,
+            "month": config.month,
             "trip_path": trip_path.as_posix(),
             "zone_lookup_path": zone_path.as_posix(),
             "columns_scanned": list(_SELECTED_TRIP_COLUMNS),

@@ -1,5 +1,6 @@
 {
   "source_config": "data_sources.json",
+  "month": "2026-01",
   "output_path": "../artifacts/eda/2026-01-quality.json",
   "timezone_assumption": "America/New_York",
   "duckdb_threads": 2,

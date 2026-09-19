@@ -1,0 +1,8 @@
+{
+  "source_config": "data_sources.json",
+  "output_dir": "../data/processed/hourly_counts_observed",
+  "report_path": "../artifacts/etl/hourly-aggregate-report.json",
+  "timezone": "America/New_York",
+  "duckdb_threads": 2,
+  "duckdb_memory_limit": "1GB"
+}
