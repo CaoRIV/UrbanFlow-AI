@@ -6,7 +6,7 @@ Quy ước: `[ ]` chưa làm, `[x]` xong sau khi đã kiểm tra. Giao một mã
 
 - [x] **W1-T1** — Khởi tạo repo, môi trường Python, `.gitignore`, README chạy thử. Xong khi tạo venv, import dependency, test smoke chạy; raw/artifact bị ignore.
 - [x] **W1-T2** — Viết `docs/data-card.md` và script tải đúng **một** tháng Yellow Taxi + zone lookup từ TLC, lưu URL/size/hash hoặc dấu vết tương đương. Xong khi tải lại được và ghi số hàng/schema.
-- [ ] **W1-T3** — EDA: null pickup/zone, range ngày, bản ghi ngoài tháng, các zone lạ và thống kê RAM/thời gian. Xong khi có bảng chất lượng và quyết định lọc.
+- [x] **W1-T3** — EDA: null pickup/zone, range ngày, bản ghi ngoài tháng, các zone lạ và thống kê RAM/thời gian. Xong khi có bảng chất lượng và quyết định lọc.
 
 ## Tuần 2
 
@@ -57,10 +57,20 @@ Vấn đề còn lại / quyết định:
 
 ### W1-T2 — 2026-09-17
 
-- Trạng thái: hoàn thành trên nhánh `develop`, chưa commit.
+- Trạng thái: hoàn thành trên nhánh `develop`, commit `889357d`.
 - Thay đổi: config nguồn tháng `2026-01`, downloader atomic/idempotent, kiểm tra schema, manifest checksum, data card và hướng dẫn chạy.
 - Đã chạy: `python -m urbanflow.download_data --config configs/data_sources.json`; lần hai trả `cached` cho cả hai file; `python -m pytest` — 3 test passed.
 - Yellow Taxi: 64,165,080 bytes; 3,724,889 raw rows; SHA-256 `8b3933fe6f0d7b6d8826613c0dd724edc680ff7c49e2bd4c7635c05102728637`.
 - Zone lookup: 12,331 bytes; 265 rows; SHA-256 `1a99e105092230f8620f301edcca7f80d3080642ff404d28ed957d3fa222c8ed`.
 - Kiểm tra ignore: Parquet, lookup và manifest dưới `data/raw/` đều được Git bỏ qua.
 - Vấn đề còn lại: timezone, null, out-of-month và zone lạ chưa đánh giá; chuyển sang W1-T3.
+
+### W1-T3 — 2026-09-19
+
+- Trạng thái: hoàn thành trên nhánh `develop`, chưa commit.
+- Thay đổi: config EDA, DuckDB scan đúng hai cột, kiểm tra timestamp/zone/hourly coverage, đo RSS, báo cáo JSON và data card có quyết định lọc.
+- Đã chạy: `python -m urbanflow.inspect_data --config configs/eda.json`; stdout là JSON hợp lệ; `python -m pytest` — 4 test passed; `pip check` không có dependency lỗi.
+- Kết quả: 3,724,889 raw rows; 7 rows ngoài tháng; 0 null; 5,930 rows thuộc zone 264/265; giữ 3,718,952 rows thuộc 260 zone hợp lệ; đủ 744/744 giờ.
+- Tài nguyên lần xác minh cuối: 6.824 giây, RSS đỉnh 78,860,288 bytes, DuckDB 2 threads và memory limit 1 GB.
+- Quyết định: diễn giải timestamp nguồn là local wall time `America/New_York`; loại null, ngoài tháng, zone ngoài lookup và zone 264/265; kiểm tra DST lại khi tải tháng 3.
+- Vấn đề còn lại: chưa aggregate hoặc tạo label; chuyển sang W2-T1.
