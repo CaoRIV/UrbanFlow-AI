@@ -196,3 +196,39 @@ Không tháng nào có pickup timestamp null, pickup zone null hoặc zone ngoà
 Mỗi file có schema `zone_id: int32`, `target_hour_utc: timestamp[us, tz=UTC]`, `trip_count: int64`, `source_month: string`. Khóa `(zone_id, target_hour_utc)` duy nhất trong từng file; tổng `trip_count` bằng đúng số trip giữ lại.
 
 Output này chưa có các cặp `zone × hour` bằng zero. W2-T2 sẽ dựng full grid và tách zero thật khỏi source-missing interval.
+
+## Full hourly grid W2-T2 — 2026-09-21
+
+Lệnh: `python -m urbanflow.build_hourly_grid --config configs/grid.json`.
+Tập zone gồm 263 service zones trong lookup (loại 264/265), kể cả zone không có
+chuyến trong ba tháng. Khoảng UTC là `[2026-01-01T05:00:00Z, 2026-04-01T04:00:00Z)`.
+
+| Tháng | Giờ UTC | Grid rows | Observed rows | Zero rows | Missing rows | Tổng trips |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 2026-01 | 744 | 195,672 | 122,342 | 73,330 | 0 | 3,718,952 |
+| 2026-02 | 672 | 176,736 | 111,154 | 65,582 | 0 | 3,394,829 |
+| 2026-03 | 743 | 195,409 | 122,108 | 73,301 | 0 | 3,946,183 |
+| **Tổng** | **2,159** | **567,817** | **355,604** | **212,213** | **0** | **11,059,964** |
+
+Đây là số liệu từ lần chạy dữ liệu thật, không phải fixture test. Không có khóa
+trùng và tổng trips không đổi so với W2-T1. Tháng 3 có 743 giờ UTC do spring DST;
+không chèn thêm một giờ zero cho local gap.
+
+Schema: `zone_id: int32`, `target_hour_utc: timestamp[us, tz=UTC]`,
+`trip_count: int64` (nullable), `source_month: string`, `source_status: string`.
+Giờ không có pickup nguồn giữ `NULL/source_missing`; fall DST không phân biệt
+được fold giữ `NULL/dst_ambiguous` ở cả hai UTC hours. Giờ có pickup nguồn nhưng
+zone không có chuyến hợp lệ nhận zero. Độ phủ nguồn dùng mọi pickup có timestamp
+trong tháng và không mơ hồ, bao gồm zone bị loại. Không thể suy ra nguồn đầy đủ
+từng phần chỉ từ việc có pickup; `missing_rows = 0` không loại trừ mất dữ liệu
+một phần. Metadata chất lượng này không được dùng làm feature giờ đích.
+
+Pipeline quét raw chỉ hai cột, đối chiếu từng count với observed output trước khi
+dựng grid, chạy từng tháng với DuckDB 2 threads / memory limit 1 GB. Lần chạy đầu
+ghi nhận 4.332–6.947 giây/tháng, RSS đỉnh lớn nhất 128,954,368 bytes. Các số này
+phụ thuộc máy và lần chạy. Báo cáo JSON và Parquet đều nằm ngoài Git.
+
+Chạy lại cùng config cho SHA-256 giống nhau ở cả ba Parquet. Truy vấn độc lập
+trên toàn bộ output xác nhận 567,817 khóa duy nhất, 2,159 giờ liên tục cách nhau
+đúng 1 giờ UTC và tổng trips không đổi. Bộ test có 18 trường hợp pass, gồm DST
+spring/fall, zero/missing, zone không có chuyến, biên tháng và input không hợp lệ.

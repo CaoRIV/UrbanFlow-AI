@@ -16,6 +16,28 @@
 6. Tính lag và rolling bằng `shift` theo từng zone trước; rolling không bao gồm giờ đích. Fit encoder/transformer chỉ trên train; áp dụng validation/test theo cùng schema.
 7. Baseline: số chuyến cùng zone ở giờ tương ứng 7 ngày trước (`target_hour - 168h`); thiếu lịch sử thì dùng fallback đã định trước từ train, và báo tỷ lệ fallback.
 
+### Hợp đồng full grid W2-T2
+
+- Chạy `python -m urbanflow.build_hourly_grid --config configs/grid.json` sau aggregate.
+- Tập zone cố định là tất cả service zones trong lookup; không lọc theo hoạt động
+  của các tháng dùng để đánh giá. Cùng tập zone cho mọi tháng.
+- Khoảng thời gian bao trọn các tháng local liên tiếp đã cấu hình; lưới chạy theo
+  UTC với bước 1 giờ. Spring DST có 23 giờ trong ngày chuyển; fall DST có 25 giờ.
+- `source_status = available` khi có ít nhất một raw pickup trong tháng, timestamp
+  hợp lệ và không mơ hồ, bất kể zone có bị loại hay không. Zone không có count
+  trong giờ này nhận `0`. Đây là giả định vận hành, không chứng minh dữ liệu đầy đủ.
+- Không có pickup nguồn trong giờ: `source_missing`, `trip_count = NULL`. Hai UTC
+  hours tương ứng local fall-back hour bị loại: `dst_ambiguous`, count cũng `NULL`.
+  Spring gap không phải một giờ UTC bị thiếu, không thêm giờ giả cho gap.
+- Không suy luận nguồn thiếu một phần từ counts; V1 chưa có metadata outage bên ngoài.
+  Thiếu cả file raw/observed là lỗi đầu vào, không tự tạo toàn tháng zero.
+- `source_status` là metadata chất lượng label biết khi xử lý lịch sử, không phải
+  feature biết trước giờ đích. Các task split/baseline/features sau này phải xử lý
+  label/lag thiếu một cách tường minh, không đổi `NULL` thành zero mặc định.
+- Khóa `(zone_id, target_hour_utc)` duy nhất; timestamp UTC; count nullable int64,
+  không âm khi có giá trị. Tổng count giữ nguyên so với W2-T1. Báo cáo lưu hash
+  input/output/config, số giờ/zone/zero/missing và tài nguyên từng tháng.
+
 ## Metric và chống tự đánh lừa
 
 | Chỉ số | Ý nghĩa / cách dùng |

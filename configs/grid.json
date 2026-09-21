@@ -1,0 +1,5 @@
+{
+  "aggregate_config": "aggregate.json",
+  "output_dir": "../data/processed/hourly_grid",
+  "report_path": "../artifacts/etl/hourly-grid-report.json"
+}
