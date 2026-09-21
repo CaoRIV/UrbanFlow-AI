@@ -1,6 +1,6 @@
 # Task board — UrbanFlow AI
 
-Quy ước: `[ ]` chưa làm, `[x]` xong sau khi đã kiểm tra. Giao một mã task mỗi lần. Đây là kế hoạch, chưa task nào được triển khai.
+Quy ước: `[ ]` chưa làm, `[x]` xong sau khi đã kiểm tra. Giao một mã task mỗi lần. Kết quả thực nằm trong nhật ký bên dưới.
 
 ## Tuần 1
 
@@ -11,7 +11,7 @@ Quy ước: `[ ]` chưa làm, `[x]` xong sau khi đã kiểm tra. Giao một mã
 ## Tuần 2
 
 - [x] **W2-T1** — Tải thêm tháng thứ hai, ba; scan chỉ cột cần, aggregate theo UTC hour và zone. Xong khi pipeline tái chạy được và không đọc mọi cột vào RAM.
-- [ ] **W2-T2** — Dựng full hourly grid, phân biệt zero thật với khoảng nguồn thiếu và xử lý DST; test toy. Xong khi khóa chính `zone_id,target_hour_utc` duy nhất.
+- [x] **W2-T2** — Dựng full hourly grid, phân biệt zero thật với khoảng nguồn thiếu và xử lý DST; test toy. Xong khi khóa chính `zone_id,target_hour_utc` duy nhất.
 - [ ] **W2-T3** — Split time và seasonal naive; ghi MAE/WAPE, số hàng/số zone mỗi split. Xong khi có baseline lưu file và config split.
 
 ## Tuần 3
@@ -77,7 +77,7 @@ Vấn đề còn lại / quyết định:
 
 ### W2-T1 — 2026-09-19
 
-- Trạng thái: hoàn thành trên nhánh `develop`, chưa commit.
+- Trạng thái: hoàn thành trên nhánh `develop`, commit `8ba2e97`.
 - Thay đổi: downloader clean cutover sang danh sách tháng; tải đủ Q1/2026; lọc trip theo data contract; nhận diện DST; aggregate từng tháng thành observed `zone_id × target_hour_utc` Parquet.
 - Đã chạy: downloader lần hai trả `cached` cho toàn bộ raw files; aggregate hai lần cho cùng SHA-256; `python -m pytest` — 6 test passed; `pip check` không có dependency lỗi.
 - Dữ liệu: 11,077,206 raw rows; loại 17,242; giữ 11,059,964 trips; tạo 355,604 observed hourly rows; không có khóa trùng.
@@ -85,3 +85,29 @@ Vấn đề còn lại / quyết định:
 - Tài nguyên lần chạy ghi nhận: 6.737–8.777 giây/tháng; RSS đỉnh lớn nhất 86,032,384 bytes; DuckDB 2 threads, memory limit 1 GB.
 - Invariant: tổng `trip_count` bằng số trips giữ lại cho từng tháng và toàn bộ ba tháng.
 - Vấn đề còn lại: output chưa có zero rows hoặc source-missing markers; chuyển sang W2-T2.
+
+### W2-T2 — 2026-09-21
+
+- Trạng thái: hoàn thành trên nhánh `develop`, chưa commit.
+- [x] Thêm `configs/grid.json` và `urbanflow.build_hourly_grid`, kế thừa nguồn và
+  giới hạn tài nguyên từ config aggregate; không thêm dependency.
+- [x] Dùng 263 zone từ lookup cố định; dựng lưới UTC liên tục cho các tháng liên tiếp.
+- [x] Phân biệt zero/NULL bằng độ phủ raw; đánh dấu cả hai fall-back UTC hours là
+  `dst_ambiguous`; spring gap không tạo giờ giả.
+- [x] Đối chiếu observed counts với raw/lookup; kiểm tra schema, count, khóa duy nhất;
+  báo lỗi khi thiếu file, input sai hoặc tháng không liên tiếp.
+- [x] Chạy `python -m pytest`: 18 passed (6 cũ + 12 trường hợp W2-T2).
+- [x] Chạy `python -m urbanflow.build_hourly_grid --config configs/grid.json` trên
+  Q1/2026: 2,159 giờ × 263 zone = 567,817 rows; 355,604 observed, 212,213 zero,
+  0 missing; bảo toàn 11,059,964 trips.
+- [x] Cập nhật README, data contract và data card; output/report bị Git ignore.
+- [x] Chạy lại dữ liệu thật: SHA-256 cả ba Parquet không đổi. Truy vấn độc lập
+  toàn bộ Parquet xác nhận 567,817 khóa duy nhất và không có khoảng nhảy UTC khác 1 giờ.
+- [x] `pip check` không có dependency lỗi; `git diff --check` không có lỗi whitespace;
+  review độc lập không phát hiện lỗi cần chặn. Repo chưa cấu hình linter riêng.
+- Tài nguyên lần đầu: 4.332–6.947 giây/tháng; RSS đỉnh lớn nhất 128,954,368 bytes;
+  DuckDB 2 threads / 1 GB. Không có seed vì phép biến đổi xác định, không ngẫu nhiên.
+- Môi trường: `.venv` chạy được khi cấp quyền thực thi phù hợp; không sửa venv.
+- Giới hạn: độ phủ theo giờ không phát hiện mất dữ liệu một phần; các task sau
+  không được dùng `source_status` giờ đích làm feature hoặc tự đổi NULL thành zero.
+- Chưa có baseline/model nên chưa có MAE/WAPE để so sánh. Task tiếp theo: W2-T3.

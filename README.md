@@ -42,6 +42,37 @@ python -m urbanflow.aggregate_hourly --config configs/aggregate.json
 
 Pipeline chỉ scan pickup timestamp và pickup zone, áp dụng lọc đã ghi trong data card, xử lý DST trước khi đổi UTC, rồi ghi Parquet theo tháng vào `data/processed/hourly_counts_observed/`. Đây chưa phải full grid; zero và source-missing được xử lý trong W2-T2.
 
+Dựng full hourly grid sau bước aggregate:
+
+```powershell
+python -m urbanflow.build_hourly_grid --config configs/grid.json
+```
+
+Output theo tháng nằm trong `data/processed/hourly_grid/`, báo cáo nằm tại
+`artifacts/etl/hourly-grid-report.json`. Config grid tham chiếu config aggregate để
+dùng cùng nguồn, timezone và giới hạn tài nguyên. Tập zone lấy từ lookup hợp lệ,
+không phụ thuộc zone có chuyến trong train/test. Khoảng thời gian lấy toàn bộ các
+tháng liên tiếp trong source config, từ đầu tháng local đầu tiên đến đầu tháng
+kế tiếp tháng cuối (exclusive), rồi dựng lưới theo UTC.
+
+Schema giữ `zone_id`, `target_hour_utc`, `trip_count`, `source_month` và thêm
+`source_status`: `available`, `source_missing`, hoặc `dst_ambiguous`.
+`trip_count` bằng `0` chỉ khi giờ có pickup nguồn nhưng zone không có chuyến hợp lệ;
+giờ thiếu nguồn hoặc mơ hồ do DST giữ `NULL`. Giờ nguồn có pickup chỉ ở zone bị
+loại vẫn được coi là có độ phủ. Đây là giả định độ phủ theo giờ, không phát hiện
+được mất dữ liệu một phần. Không dùng `source_status` của giờ đích làm feature.
+
+Pipeline kiểm tra observed counts khớp với raw/lookup trước khi ghi từng file.
+Thiếu file, schema sai, counts cũ hoặc tháng không liên tiếp sẽ báo lỗi. Mỗi file
+tháng được ghi atomic; nếu tháng sau thất bại, file tháng trước có thể đã cập nhật.
+Chỉ dùng toàn bộ output sau khi lệnh kết thúc thành công và báo cáo được ghi mới.
+
+Kiểm tra pipeline bằng dữ liệu toy (không tải TLC):
+
+```powershell
+python -m pytest
+```
+
 ## Đọc theo thứ tự
 
 1. [PROJECT_SPEC.md](docs/PROJECT_SPEC.md): mục tiêu, phạm vi, định nghĩa dự báo và tiêu chí hoàn thành.
