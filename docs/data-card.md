@@ -2,11 +2,11 @@
 
 ## Phạm vi hiện tại
 
-W2-T1 đã tải đủ ba tháng, áp dụng quy tắc chất lượng và aggregate pickup hợp lệ thành `zone_id × target_hour_utc`. Output hiện chỉ chứa các nhóm đã quan sát; chưa dựng full grid, chia train/validation/test hoặc train model.
+W2-T3 đã tải và làm sạch đủ ba tháng, dựng full grid 263 zone × UTC hour, khóa split thời gian và ghi seasonal-naive baseline. Chưa tạo feature lag/rolling cho model CPU hoặc train model W3.
 
 - Dataset: NYC TLC Yellow Taxi Trip Records
 - Tháng: `2026-01` đến `2026-03`
-- Cửa sổ đánh giá dự kiến: hai tháng đầu cho train; tháng 3 sẽ được chia validation/test trong W2-T3
+- Cửa sổ đánh giá: hai tháng đầu train; tháng 3 chia validation/test theo ranh giới UTC trong `configs/baseline.json`
 - Ngày tải: tháng 1 — `2026-09-17`; tháng 2–3 — `2026-09-19`
 - Config tái lập: `configs/data_sources.json`
 - Raw directory: `data/raw/` — bị Git ignore
@@ -195,7 +195,7 @@ Không tháng nào có pickup timestamp null, pickup zone null hoặc zone ngoà
 
 Mỗi file có schema `zone_id: int32`, `target_hour_utc: timestamp[us, tz=UTC]`, `trip_count: int64`, `source_month: string`. Khóa `(zone_id, target_hour_utc)` duy nhất trong từng file; tổng `trip_count` bằng đúng số trip giữ lại.
 
-Output này chưa có các cặp `zone × hour` bằng zero. W2-T2 sẽ dựng full grid và tách zero thật khỏi source-missing interval.
+Output observed này chưa có các cặp `zone × hour` bằng zero; full grid và source-missing contract được ghi ở phần W2-T2 bên dưới.
 
 ## Full hourly grid W2-T2 — 2026-09-21
 
@@ -232,3 +232,37 @@ Chạy lại cùng config cho SHA-256 giống nhau ở cả ba Parquet. Truy v�
 trên toàn bộ output xác nhận 567,817 khóa duy nhất, 2,159 giờ liên tục cách nhau
 đúng 1 giờ UTC và tổng trips không đổi. Bộ test có 18 trường hợp pass, gồm DST
 spring/fall, zero/missing, zone không có chuyến, biên tháng và input không hợp lệ.
+
+## Seasonal-naive baseline W2-T3 — 2026-09-22
+
+Lệnh: `python -m urbanflow.evaluate_baseline --config configs/baseline.json`.
+Baseline dự báo count cùng zone tại `target_hour_utc - 168h`; split theo UTC,
+không shuffle. Ba khoảng half-open đã khóa trong config:
+
+- train: `[2026-01-01T05:00:00Z, 2026-03-01T05:00:00Z)`;
+- validation: `[2026-03-01T05:00:00Z, 2026-03-16T04:00:00Z)`;
+- test: `[2026-03-16T04:00:00Z, 2026-04-01T04:00:00Z)`.
+
+| Split | Giờ UTC | Rows | Scored | Fallback rows | MAE | WAPE |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Train | 1,416 | 372,408 | 372,145 | 43,921 | 6.230696 | 0.326374 |
+| Validation | 359 | 94,417 | 94,417 | 0 | 6.397990 | 0.308649 |
+| Test | 384 | 100,992 | 100,992 | 0 | 4.675301 | 0.237388 |
+
+Mỗi split có 263 zone. Actual Q1/2026 không có source-missing rows. Target train
+đầu tiên của mỗi zone không có lịch sử nên 263 rows không được chấm; 167 giờ train
+tiếp theo dùng mean cùng zone từ các target sớm hơn. Validation/test có đủ lag 168h,
+không dùng fallback. Nếu dữ liệu khác có lag thiếu, validation/test chỉ dùng zone
+mean fit trên train; actual target và actual validation/test không cập nhật fallback.
+
+`artifacts/baseline/metrics.json` chứa MAE theo zone và UTC hour ngoài bảng tổng
+hợp. Predictions Parquet có 567,817 khóa duy nhất, kích thước 1,998,569 bytes và
+SHA-256 `1b11400cad16f56e3819c487799bd8511fdd2b80b4ff4f0942a75c6f745c0128`;
+chạy lại giữ nguyên hash. Một lần chạy ghi nhận 1.283 giây, RSS đỉnh 450,646,016
+bytes với DuckDB 2 threads / memory limit 1 GB. Artifact nằm ngoài Git.
+
+Test baseline kiểm tra leakage bằng cách sửa actual target/tương lai: prediction
+của chính target không đổi, còn prediction ở target sau đúng lag thay đổi. WAPE
+được để `NULL` khi tổng actual bằng zero; label `NULL` không bị đổi thành zero.
+Kết quả test baseline đã được ghi nhận một lần; các quyết định W3 chỉ dùng validation
+và phải so sánh model trên đúng split/config này.

@@ -38,6 +38,26 @@
   không âm khi có giá trị. Tổng count giữ nguyên so với W2-T1. Báo cáo lưu hash
   input/output/config, số giờ/zone/zero/missing và tài nguyên từng tháng.
 
+### Hợp đồng split và seasonal naive W2-T3
+
+- Chạy `python -m urbanflow.evaluate_baseline --config configs/baseline.json` sau
+  full grid. Split là ba khoảng UTC half-open, liên tiếp, không shuffle; config đã
+  khóa ranh giới train/validation/test và phải được tái sử dụng cho model sau.
+- Dự báo seasonal naive của một hàng chỉ đọc count cùng zone tại
+  `target_hour_utc - 168h`. Actual của target không tham gia tính prediction.
+- Nếu lag train thiếu, fallback là mean cùng zone chỉ trên các target train sớm hơn.
+  Nếu lag validation/test thiếu, fallback là mean cùng zone fit trên toàn train;
+  không cập nhật bằng actual validation/test. Báo số hàng và tỷ lệ fallback.
+- Hàng có actual `NULL` không được chấm điểm. Prediction có thể tồn tại nhưng
+  `absolute_error` phải là `NULL`; không đổi label thiếu thành zero.
+- MAE/WAPE tổng thể tính trên hàng có cả actual và prediction. WAPE là `NULL` khi
+  tổng actual bằng zero. Báo thêm MAE theo zone và UTC hour cho từng split.
+- Output predictions giữ split, actual, lag, prediction, nguồn prediction, cờ
+  fallback và absolute error. Metrics JSON lưu config/hash/schema/tài nguyên; phép
+  tính xác định nên không có seed.
+- Baseline cố định được chạy trên test để tạo mốc so sánh. Các quyết định feature
+  và model ở W3 chỉ dùng validation; không thay split hoặc baseline sau khi xem test.
+
 ## Metric và chống tự đánh lừa
 
 | Chỉ số | Ý nghĩa / cách dùng |

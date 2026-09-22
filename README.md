@@ -67,6 +67,25 @@ Thiếu file, schema sai, counts cũ hoặc tháng không liên tiếp sẽ báo
 tháng được ghi atomic; nếu tháng sau thất bại, file tháng trước có thể đã cập nhật.
 Chỉ dùng toàn bộ output sau khi lệnh kết thúc thành công và báo cáo được ghi mới.
 
+Đánh giá seasonal-naive baseline trên các split UTC cố định:
+
+```powershell
+python -m urbanflow.evaluate_baseline --config configs/baseline.json
+```
+
+Config khóa train tại `[2026-01-01T05:00:00Z, 2026-03-01T05:00:00Z)`,
+validation tại `[2026-03-01T05:00:00Z, 2026-03-16T04:00:00Z)` và test tại
+`[2026-03-16T04:00:00Z, 2026-04-01T04:00:00Z)`. Dự báo chính là count cùng
+zone ở `target_hour_utc - 168h`. Khi lag thiếu, train chỉ dùng mean của chính
+zone từ các target sớm hơn; validation/test dùng zone mean fit trên train.
+
+Predictions nằm tại `artifacts/baseline/seasonal-naive-predictions.parquet`;
+`artifacts/baseline/metrics.json` lưu MAE/WAPE tổng thể, MAE theo zone và UTC
+hour, fallback rate, split boundaries và hash input/output. Target `NULL` không
+được chấm điểm; WAPE là `NULL` khi tổng actual bằng zero. Trên Q1/2026,
+validation đạt MAE `6.397990`, WAPE `0.308649`; test đạt MAE `4.675301`,
+WAPE `0.237388`. Đây là historical backtest, không phải dự báo real time.
+
 Kiểm tra pipeline bằng dữ liệu toy (không tải TLC):
 
 ```powershell
