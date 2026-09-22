@@ -12,7 +12,7 @@ Quy ước: `[ ]` chưa làm, `[x]` xong sau khi đã kiểm tra. Giao một mã
 
 - [x] **W2-T1** — Tải thêm tháng thứ hai, ba; scan chỉ cột cần, aggregate theo UTC hour và zone. Xong khi pipeline tái chạy được và không đọc mọi cột vào RAM.
 - [x] **W2-T2** — Dựng full hourly grid, phân biệt zero thật với khoảng nguồn thiếu và xử lý DST; test toy. Xong khi khóa chính `zone_id,target_hour_utc` duy nhất.
-- [ ] **W2-T3** — Split time và seasonal naive; ghi MAE/WAPE, số hàng/số zone mỗi split. Xong khi có baseline lưu file và config split.
+- [x] **W2-T3** — Split time và seasonal naive; ghi MAE/WAPE, số hàng/số zone mỗi split. Xong khi có baseline lưu file và config split.
 
 ## Tuần 3
 
@@ -88,7 +88,7 @@ Vấn đề còn lại / quyết định:
 
 ### W2-T2 — 2026-09-21
 
-- Trạng thái: hoàn thành trên nhánh `develop`, chưa commit.
+- Trạng thái: hoàn thành trên nhánh `develop`, commit `a78b827`.
 - [x] Thêm `configs/grid.json` và `urbanflow.build_hourly_grid`, kế thừa nguồn và
   giới hạn tài nguyên từ config aggregate; không thêm dependency.
 - [x] Dùng 263 zone từ lookup cố định; dựng lưới UTC liên tục cho các tháng liên tiếp.
@@ -111,3 +111,26 @@ Vấn đề còn lại / quyết định:
 - Giới hạn: độ phủ theo giờ không phát hiện mất dữ liệu một phần; các task sau
   không được dùng `source_status` giờ đích làm feature hoặc tự đổi NULL thành zero.
 - Chưa có baseline/model nên chưa có MAE/WAPE để so sánh. Task tiếp theo: W2-T3.
+
+### W2-T3 — 2026-09-22
+
+- Trạng thái: hoàn thành trên nhánh `develop`, chưa commit.
+- Thay đổi: thêm `configs/baseline.json` và `urbanflow.evaluate_baseline`; khóa
+  ba split UTC liên tiếp, seasonal lag 168h, fallback không rò rỉ và output
+  predictions/metrics có hash, schema, tài nguyên.
+- Split thật: train 1,416 giờ / 372,408 rows; validation 359 giờ / 94,417 rows;
+  test 384 giờ / 100,992 rows; mỗi split có đủ 263 zone.
+- Baseline: train MAE 6.230696, WAPE 0.326374; validation MAE 6.397990,
+  WAPE 0.308649; test MAE 4.675301, WAPE 0.237388.
+- Fallback: 43,921 train rows dùng prior-zone mean; 263 target đầu tiên không có
+  prediction. Validation/test có đủ lag 168h nên fallback rate bằng 0.
+- Đã chạy `python -m pytest`: 22 passed. Test mới kiểm tra split liên tiếp, khóa
+  trùng, WAPE zero-denominator, target thiếu và việc sửa target/tương lai không đổi
+  prediction hiện tại.
+- Chạy dữ liệu thật và truy vấn độc lập xác nhận 567,817 rows/khóa duy nhất; metrics
+  khớp report. Chạy lại cho cùng prediction SHA-256
+  `1b11400cad16f56e3819c487799bd8511fdd2b80b4ff4f0942a75c6f745c0128`.
+- Một lần chạy ghi nhận 1.283 giây, RSS đỉnh 450,646,016 bytes, DuckDB 2 threads / 1 GB;
+  output predictions 1,998,569 bytes. Không có seed vì baseline xác định.
+- Giới hạn: test baseline đã được ghi nhận; W3 chỉ dùng validation để chọn
+  feature/model và phải giữ nguyên split. Task tiếp theo: W3-T1.
