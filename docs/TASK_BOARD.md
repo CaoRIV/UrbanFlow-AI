@@ -16,7 +16,7 @@ Quy ước: `[ ]` chưa làm, `[x]` xong sau khi đã kiểm tra. Giao một mã
 
 ## Tuần 3
 
-- [ ] **W3-T1** — Tạo calendar + lag 1/24/168h, rolling shift theo zone; test không rò rỉ tương lai.
+- [x] **W3-T1** — Tạo calendar + lag 1/24/168h, rolling shift theo zone; test không rò rỉ tương lai.
 - [ ] **W3-T2** — Train model CPU nhỏ, dùng validation để chọn một cấu hình; khóa test, lưu model/config/metrics.
 - [ ] **W3-T3** — Model card: bảng baseline/model test, lỗi theo zone/giờ, giới hạn; chọn model phục vụ một cách trung thực.
 
@@ -114,7 +114,7 @@ Vấn đề còn lại / quyết định:
 
 ### W2-T3 — 2026-09-22
 
-- Trạng thái: hoàn thành trên nhánh `develop`, chưa commit.
+- Trạng thái: hoàn thành trên nhánh `develop`, commit `6a89189`.
 - Thay đổi: thêm `configs/baseline.json` và `urbanflow.evaluate_baseline`; khóa
   ba split UTC liên tiếp, seasonal lag 168h, fallback không rò rỉ và output
   predictions/metrics có hash, schema, tài nguyên.
@@ -134,3 +134,24 @@ Vấn đề còn lại / quyết định:
   output predictions 1,998,569 bytes. Không có seed vì baseline xác định.
 - Giới hạn: test baseline đã được ghi nhận; W3 chỉ dùng validation để chọn
   feature/model và phải giữ nguyên split. Task tiếp theo: W3-T1.
+
+### W3-T1 — 2026-09-23
+
+- Trạng thái: hoàn thành trên nhánh `develop`, chưa commit.
+- Thay đổi: thêm `configs/features.json` và `urbanflow.build_features`; tạo
+  calendar UTC, lag 1/24/168h, rolling mean 24/168h chỉ từ các hàng trước target,
+  rồi gắn đúng split đã khóa. Không dùng `source_status` làm feature.
+- Missing policy: lag thiếu giữ `NULL`; rolling chỉ có giá trị khi đủ toàn bộ
+  window không NULL; `features_complete` đánh dấu năm history feature đều usable.
+- Dữ liệu thật: 567,817 rows/khóa duy nhất. Train có 328,224/372,408 rows đủ
+  history; validation 94,417/94,417; test 100,992/100,992. Q1/2026 không có target
+  missing. 44,184 train rows đầu thiếu lag/rolling 168h như warm-up dự kiến.
+- Đã chạy `python -m pytest`: 25 passed. Test toy sửa actual target/tương lai và
+  xác nhận feature target hiện tại không đổi; lag hàng sau phản ánh actual mới;
+  missing trong history làm lag/rolling tương ứng thành NULL. Input khóa trùng bị từ chối.
+- Truy vấn độc lập xác nhận row count bằng unique-key count và cờ completeness khớp
+  nullness ở cả ba split. Chạy lại cho cùng feature SHA-256
+  `b089d90c160c71d2f71c3bc53da1528cd5edcef195598f334c79eaf32f10fe99`.
+- Một lần chạy ghi nhận 1.903 giây, RSS đỉnh 525,185,024 bytes, DuckDB 2 threads /
+  1 GB; output Parquet 3,936,369 bytes. Không có seed vì phép biến đổi xác định.
+- Chưa train model hoặc thay metric baseline trong task này. Task tiếp theo: W3-T2.

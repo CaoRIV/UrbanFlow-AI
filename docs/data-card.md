@@ -2,7 +2,8 @@
 
 ## Phạm vi hiện tại
 
-W2-T3 đã tải và làm sạch đủ ba tháng, dựng full grid 263 zone × UTC hour, khóa split thời gian và ghi seasonal-naive baseline. Chưa tạo feature lag/rolling cho model CPU hoặc train model W3.
+W3-T1 đã tải và làm sạch đủ ba tháng, dựng full grid 263 zone × UTC hour, khóa split,
+ghi seasonal-naive baseline và tạo feature lag/rolling leakage-safe. Chưa train model W3.
 
 - Dataset: NYC TLC Yellow Taxi Trip Records
 - Tháng: `2026-01` đến `2026-03`
@@ -266,3 +267,33 @@ của chính target không đổi, còn prediction ở target sau đúng lag tha
 được để `NULL` khi tổng actual bằng zero; label `NULL` không bị đổi thành zero.
 Kết quả test baseline đã được ghi nhận một lần; các quyết định W3 chỉ dùng validation
 và phải so sánh model trên đúng split/config này.
+
+## Feature dataset W3-T1 — 2026-09-23
+
+Lệnh: `python -m urbanflow.build_features --config configs/features.json`. Output
+`data/processed/features/hourly_features.parquet` có 567,817 rows, giữ nguyên 263
+zone × 2,159 target hours và ba split của baseline. Khóa
+`(zone_id, target_hour_utc)` duy nhất.
+
+Feature model gồm `zone_id`; calendar UTC (hour, ISO day-of-week, month, weekend);
+lag 1/24/168h; rolling mean 24/168h. Target, split và `source_status` được giữ để
+train/audit nhưng không thuộc danh sách feature. Mỗi lag/rolling chỉ đọc rows trước
+target trong cùng zone. Rolling cần đủ toàn bộ window không NULL; lịch sử thiếu giữ
+NULL, không được coi là zero. `features_complete` đánh dấu hàng có đủ cả năm
+history feature.
+
+| Split | Rows | Target non-NULL | Feature complete | Training eligible |
+| --- | ---: | ---: | ---: | ---: |
+| Train | 372,408 | 372,408 | 328,224 | 328,224 |
+| Validation | 94,417 | 94,417 | 94,417 | 94,417 |
+| Test | 100,992 | 100,992 | 100,992 | 100,992 |
+
+Train thiếu 263 lag-1h, 6,312 lag/rolling-24h và 44,184 lag/rolling-168h do warm-up;
+validation/test có đủ lịch sử. Đây là thống kê output feature, không phải metric model;
+W3-T1 không thay MAE/WAPE baseline.
+
+Parquet có kích thước 3,936,369 bytes và SHA-256
+`b089d90c160c71d2f71c3bc53da1528cd5edcef195598f334c79eaf32f10fe99`; chạy lại
+giữ nguyên hash. Một lần chạy ghi nhận 1.903 giây, RSS đỉnh 525,185,024 bytes với
+DuckDB 2 threads / memory limit 1 GB. Report tại
+`artifacts/features/feature-report.json`; cả report và feature Parquet nằm ngoài Git.
