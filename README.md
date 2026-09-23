@@ -86,6 +86,19 @@ hour, fallback rate, split boundaries và hash input/output. Target `NULL` khôn
 validation đạt MAE `6.397990`, WAPE `0.308649`; test đạt MAE `4.675301`,
 WAPE `0.237388`. Đây là historical backtest, không phải dự báo real time.
 
+Tạo feature leakage-safe trên đúng full grid và split đã khóa:
+
+```powershell
+python -m urbanflow.build_features --config configs/features.json
+```
+
+Output `data/processed/features/hourly_features.parquet` giữ target và metadata
+riêng khỏi các feature: calendar UTC, lag 1/24/168 giờ và rolling mean 24/168 giờ.
+Mỗi rolling window kết thúc tại `target_hour_utc - 1h` và chỉ có giá trị khi đủ
+toàn bộ lịch sử không NULL; lịch sử thiếu được giữ NULL, không tự đổi thành zero.
+`artifacts/features/feature-report.json` lưu schema, hash, số hàng usable theo
+split và tài nguyên chạy.
+
 Kiểm tra pipeline bằng dữ liệu toy (không tải TLC):
 
 ```powershell

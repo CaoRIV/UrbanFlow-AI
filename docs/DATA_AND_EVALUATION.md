@@ -58,6 +58,23 @@
 - Baseline cố định được chạy trên test để tạo mốc so sánh. Các quyết định feature
   và model ở W3 chỉ dùng validation; không thay split hoặc baseline sau khi xem test.
 
+### Hợp đồng feature W3-T1
+
+- Chạy `python -m urbanflow.build_features --config configs/features.json` trên
+  full grid. Output tái sử dụng nguyên ba split UTC của baseline; window được tính
+  xuyên biên split để validation/test có warm-up từ quá khứ, không từ tương lai.
+- Calendar gồm UTC hour, ISO day-of-week (1=Monday, 7=Sunday), month và weekend.
+  `zone_id` là categorical feature; `source_status`, `split` và target chỉ là
+  metadata/label, không phải model input.
+- Lag 1/24/168h và rolling mean 24/168h đều partition theo zone. Rolling dùng
+  `ROWS BETWEEN N PRECEDING AND 1 PRECEDING`, nên không chứa actual target.
+- Lag thiếu giữ `NULL`. Rolling chỉ có giá trị khi đủ N target quá khứ không
+  `NULL`; không bỏ qua missing và không impute zero. `features_complete` chỉ
+  true khi cả năm history feature có giá trị. Hàng train được dùng khi target cũng
+  không `NULL`; chiến lược impute khác, nếu có, phải fit trên train trong W3-T2.
+- Output giữ khóa duy nhất `(zone_id, target_hour_utc)`, được sắp xếp xác định.
+  Report lưu config/input/output hash, schema, null counts và usable rows mỗi split.
+
 ## Metric và chống tự đánh lừa
 
 | Chỉ số | Ý nghĩa / cách dùng |

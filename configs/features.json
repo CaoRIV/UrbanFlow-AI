@@ -1,0 +1,7 @@
+{
+  "baseline_config": "baseline.json",
+  "output_path": "../data/processed/features/hourly_features.parquet",
+  "report_path": "../artifacts/features/feature-report.json",
+  "lag_hours": [1, 24, 168],
+  "rolling_windows_hours": [24, 168]
+}
