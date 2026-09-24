@@ -1,0 +1,12 @@
+{
+  "model_metrics_path": "../artifacts/model/metrics.json",
+  "model_predictions_path": "../artifacts/model/predictions.parquet",
+  "baseline_metrics_path": "../artifacts/baseline/metrics.json",
+  "baseline_predictions_path": "../artifacts/baseline/seasonal-naive-predictions.parquet",
+  "zone_lookup_path": "../data/raw/taxi_zone_lookup.csv",
+  "report_path": "../artifacts/model/error-analysis.json",
+  "model_card_path": "../docs/model-card.md",
+  "top_n": 10,
+  "duckdb_threads": 2,
+  "duckdb_memory_limit": "512MB"
+}

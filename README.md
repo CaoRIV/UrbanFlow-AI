@@ -1,6 +1,6 @@
 # UrbanFlow AI — bộ tài liệu khởi động
 
-Mục tiêu: ứng dụng dự báo **số lượt đón khách Yellow Taxi trong giờ kế tiếp theo taxi zone tại NYC**, có API và dashboard để trình bày trong CV. Dự án hiện ở giai đoạn khởi tạo môi trường và pipeline; chưa phải ứng dụng đã triển khai.
+Mục tiêu: ứng dụng dự báo **số lượt đón khách Yellow Taxi trong giờ kế tiếp theo taxi zone tại NYC**, có API và dashboard để trình bày trong CV. Pipeline historical backtest và model card đã hoàn thành; API/UI chưa triển khai.
 
 ## Thiết lập môi trường phát triển
 
@@ -125,6 +125,24 @@ MAE `3.766444`, WAPE `0.191241`; seasonal-naive baseline tương ứng là MAE
 `xgboost_bed2c66982d2` dùng seed 42, 2 threads và 305 boost rounds. Artifacts
 nằm trong `artifacts/model/`; đây vẫn là historical backtest, không phải forecast
 production hoặc bằng chứng chất lượng ngoài Q1/2026.
+
+Phân tích lỗi W3-T3 kiểm tra schema, checksum và khóa/actual giữa model với
+baseline trước khi tính lại metric trực tiếp từ predictions:
+
+```powershell
+python -m urbanflow.analyze_model --config configs/model_analysis.json
+```
+
+Báo cáo machine-readable được ghi vào `artifacts/model/error-analysis.json`;
+[model card](docs/model-card.md) ghi protocol chọn candidate, test comparison,
+residual, zone/hour yếu, provenance và giới hạn. Trên 100.992 test rows, model
+tốt hơn baseline tại 214/263 zones và kém hơn tại 49 zones. Model overpredict
+62.948 rows, underpredict 33.784 rows; 4.382 raw predictions âm được clip về 0.
+Zone regression lớn nhất là Battery Park City (model MAE `6.492402`, baseline
+`6.195312`). Vì model vẫn giảm test MAE từ `4.675301` xuống `3.766444`, artifact
+phục vụ được khóa ở `xgboost_bed2c66982d2`. Test chỉ quyết định artifact phục vụ,
+không được dùng để đổi feature, candidate hoặc boost rounds.
+
 
 Kiểm tra pipeline bằng dữ liệu toy (không tải TLC):
 
