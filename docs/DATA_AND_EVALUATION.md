@@ -75,6 +75,22 @@
 - Output giữ khóa duy nhất `(zone_id, target_hour_utc)`, được sắp xếp xác định.
   Report lưu config/input/output hash, schema, null counts và usable rows mỗi split.
 
+### Hợp đồng API historical backtest W4-T1
+
+- Chạy `python -m uvicorn urbanflow.api:app --host 127.0.0.1 --port 8000`; config
+  mặc định là `configs/api.json`, có thể đổi bằng biến `URBANFLOW_API_CONFIG`.
+- API chỉ phục vụ artifact được `serving_decision` trong error-analysis report chọn.
+  Startup phải khớp SHA-256 prediction/zone lookup, schema, test window, số hàng,
+  số zone/hour, khóa duy nhất và absolute error; artifact sai làm startup thất bại.
+- `cutoff_utc` là biên exclusive của lịch sử đã quan sát (`hour < cutoff`) và là
+  `target_hour_utc` của interval `[cutoff, cutoff + 1h)`. Chỉ nhận giờ tròn với
+  offset UTC `Z`/`+00:00` trong test window half-open đã khóa.
+- `/zones` chỉ trả zone xuất hiện trong serving predictions. `/forecast` trả
+  prediction, actual backtest, absolute error, zone metadata, model name/version và
+  `source = historical_backtest`; đây không phải dự báo production hoặc real time.
+- Timestamp thiếu timezone/sai offset/không tròn giờ/ngoài test trả `422`; zone không
+  được phục vụ trả `404`. Thiếu query hoặc sai kiểu dùng schema lỗi chuẩn FastAPI.
+
 ## Metric và chống tự đánh lừa
 
 | Chỉ số | Ý nghĩa / cách dùng |

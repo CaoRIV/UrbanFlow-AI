@@ -143,6 +143,43 @@ Zone regression lớn nhất là Battery Park City (model MAE `6.492402`, baseli
 phục vụ được khóa ở `xgboost_bed2c66982d2`. Test chỉ quyết định artifact phục vụ,
 không được dùng để đổi feature, candidate hoặc boost rounds.
 
+Khởi động API W4-T1 từ repository root sau khi đã tạo error-analysis report:
+
+```powershell
+python -m uvicorn urbanflow.api:app --host 127.0.0.1 --port 8000
+```
+
+OpenAPI UI nằm tại `http://127.0.0.1:8000/docs`. Các endpoint:
+
+- `GET /health`: model/version, test window và số prediction rows đã load.
+- `GET /zones`: 263 zones thực sự có prediction, sắp theo `zone_id`.
+- `GET /forecast?cutoff_utc=2026-03-16T04:00:00Z&zone_id=161`.
+
+`cutoff_utc` là biên exclusive của dữ liệu đã quan sát và đồng thời là đầu giờ
+đích, nên response trên có `target_hour_utc = 2026-03-16T04:00:00Z`. API chỉ
+chấp nhận giờ tròn UTC trong test window, trả `404` cho zone không được phục vụ,
+và luôn gắn `source = historical_backtest`. Ví dụ response:
+
+```json
+{
+  "source": "historical_backtest",
+  "cutoff_utc": "2026-03-16T04:00:00Z",
+  "target_hour_utc": "2026-03-16T04:00:00Z",
+  "zone_id": 161,
+  "borough": "Manhattan",
+  "zone_name": "Midtown Center",
+  "service_zone": "Yellow Zone",
+  "prediction": 25.38193702697754,
+  "actual_trip_count": 18,
+  "absolute_error": 7.381937026977539,
+  "model_name": "xgboost_hist_cpu",
+  "model_version": "xgboost_bed2c66982d2"
+}
+```
+
+Khi startup, API đối chiếu serving decision, SHA-256 của predictions/zone lookup,
+schema, test window, full-grid dimensions và khóa duy nhất trước khi nhận request.
+API đọc prediction đã khóa bằng DuckDB; không load XGBoost hoặc train lại model.
 
 Kiểm tra pipeline bằng dữ liệu toy (không tải TLC):
 
