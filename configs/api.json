@@ -1,0 +1,7 @@
+{
+  "analysis_report_path": "../artifacts/model/error-analysis.json",
+  "predictions_path": "../artifacts/model/predictions.parquet",
+  "zone_lookup_path": "../data/raw/taxi_zone_lookup.csv",
+  "duckdb_threads": 2,
+  "duckdb_memory_limit": "256MB"
+}

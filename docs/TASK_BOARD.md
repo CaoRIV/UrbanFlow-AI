@@ -22,7 +22,7 @@ Quy ước: `[ ]` chưa làm, `[x]` xong sau khi đã kiểm tra. Giao một mã
 
 ## Tuần 4
 
-- [ ] **W4-T1** — FastAPI `GET /health`, `GET /zones`, `GET /forecast?cutoff_utc=...&zone_id=...`; response có `target_hour_utc`, `prediction`, `model_version`, nguồn backtest. Test input lỗi.
+- [x] **W4-T1** — FastAPI `GET /health`, `GET /zones`, `GET /forecast?cutoff_utc=...&zone_id=...`; response có `target_hour_utc`, `prediction`, `model_version`, nguồn backtest. Test input lỗi.
 - [ ] **W4-T2** — Vue trang demo: chọn cutoff test, top zones, line chart prediction/actual, MAE và chú thích historical backtest.
 - [ ] **W4-T3** — README end-to-end, script chạy API/UI, screenshot và walkthrough demo.
 
@@ -212,3 +212,30 @@ Vấn đề còn lại / quyết định:
   214/0/49 zone wins/ties/regressions và regression lớn nhất tại zone 13.
 - Giới hạn: chỉ là historical backtest Q1/2026; chưa đo drift hoặc chất lượng ngoài
   kỳ này. Task tiếp theo: W4-T1 API phục vụ artifact đã khóa.
+
+### W4-T1 — 2026-09-24
+
+- Trạng thái: hoàn thành, chưa commit.
+- Thay đổi: thêm FastAPI app `urbanflow.api`, `configs/api.json`, dependency FastAPI /
+  Uvicorn / httpx2, ba contract tests và tài liệu cutoff/response. API dùng DuckDB
+  in-memory table có unique index; không import hoặc load XGBoost khi phục vụ.
+- Startup gate đối chiếu serving decision với model version, SHA-256 của predictions
+  và zone lookup, required schema, test window, full-grid dimensions, khóa duy nhất,
+  null/negative values và stored absolute error trước khi nhận request.
+- Contract: `cutoff_utc` là đầu target hour `[cutoff, cutoff + 1h)`, chỉ nhận giờ
+  tròn UTC trong locked test. Response luôn có zone metadata, prediction, actual,
+  absolute error, `xgboost_bed2c66982d2` và `source = historical_backtest`.
+- Live Uvicorn smoke trên `127.0.0.1:8765`: `/health` trả 100.992 prediction rows,
+  263 zones và đúng test window; forecast zone 161 lúc `2026-03-16T04:00:00Z`
+  trả prediction `25.38193702697754`, actual `18`, error `7.381937026977539`;
+  cutoff `04:30Z` trả `422` với lỗi giờ không tròn.
+- `tests/test_api.py` — 3 passed, không warning. Test khóa response schema, chỉ trả
+  served zones, timezone/window/zone errors và từ chối duplicate prediction keys.
+- Full suite local: 33 passed, 1 failed vì venv vẫn thiếu NumPy/XGBoost cho test
+  W3-T2; test model tương ứng đã chạy 3 passed trên Colab Python 3.11.16. `pip check`
+  thành công; `git diff --check` không có lỗi whitespace.
+- Kiểm tra DuckDB độc lập khớp 100.992 rows/keys, 263 zones, 384 target hours và
+  toàn bộ giá trị response mẫu; SHA-256 prediction/zone lookup và serving version
+  khớp error-analysis report.
+- Giới hạn: API chỉ phục vụ historical test predictions, không phải inference real
+  time. Task tiếp theo: W4-T2 Vue dashboard.
