@@ -8,7 +8,7 @@ import re
 import threading
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
@@ -97,6 +97,35 @@ class ForecastResponse(BaseModel):
     absolute_error: float = Field(ge=0)
     model_name: str
     model_version: str
+
+class RankingsResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    source: Literal["historical_backtest"]
+    cutoff_utc: datetime
+    target_hour_utc: datetime
+    model_name: str
+    model_version: str
+    count: int = Field(ge=1)
+    forecasts: list[ForecastResponse]
+
+
+class HistoryResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    source: Literal["historical_backtest"]
+    zone_id: int = Field(ge=1)
+    borough: str
+    zone_name: str
+    service_zone: str
+    model_name: str
+    model_version: str
+    requested_hours: int = Field(ge=1, le=168)
+    count: int = Field(ge=1)
+    start_utc: datetime
+    end_utc: datetime
+    mae: float = Field(ge=0)
+    points: list[ForecastResponse]
 
 
 def _sha256(path: Path) -> str:
@@ -398,19 +427,7 @@ class PredictionStore:
             self._connection.close()
             self._closed = True
 
-    def forecast(self, zone_id: int, target_hour_utc: datetime) -> ForecastResponse | None:
-        with self._lock:
-            row = self._connection.execute("""
-                SELECT f.zone_id, epoch(f.target_hour_utc), f.prediction,
-                       f.actual_trip_count, f.absolute_error,
-                       z.borough, z.zone_name, z.service_zone
-                FROM forecasts f
-                INNER JOIN served_zones z USING (zone_id)
-                WHERE f.zone_id = ?
-                  AND f.target_hour_utc = to_timestamp(?)
-            """, [zone_id, target_hour_utc.timestamp()]).fetchone()
-        if row is None:
-            return None
+    def _forecast_response(self, row: tuple[Any, ...]) -> ForecastResponse:
         target = datetime.fromtimestamp(row[1], UTC)
         return ForecastResponse(
             source=_SOURCE,
@@ -426,6 +443,59 @@ class PredictionStore:
             model_name=self.model_name,
             model_version=self.model_version,
         )
+
+    def forecast(self, zone_id: int, target_hour_utc: datetime) -> ForecastResponse | None:
+        with self._lock:
+            row = self._connection.execute("""
+                SELECT f.zone_id, epoch(f.target_hour_utc), f.prediction,
+                       f.actual_trip_count, f.absolute_error,
+                       z.borough, z.zone_name, z.service_zone
+                FROM forecasts f
+                INNER JOIN served_zones z USING (zone_id)
+                WHERE f.zone_id = ?
+                  AND f.target_hour_utc = to_timestamp(?)
+            """, [zone_id, target_hour_utc.timestamp()]).fetchone()
+        if row is None:
+            return None
+        return self._forecast_response(row)
+
+    def rankings(
+        self,
+        target_hour_utc: datetime,
+        limit: int,
+    ) -> tuple[ForecastResponse, ...]:
+        with self._lock:
+            rows = self._connection.execute("""
+                SELECT f.zone_id, epoch(f.target_hour_utc), f.prediction,
+                       f.actual_trip_count, f.absolute_error,
+                       z.borough, z.zone_name, z.service_zone
+                FROM forecasts f
+                INNER JOIN served_zones z USING (zone_id)
+                WHERE f.target_hour_utc = to_timestamp(?)
+                ORDER BY f.prediction DESC, f.zone_id
+                LIMIT ?
+            """, [target_hour_utc.timestamp(), limit]).fetchall()
+        return tuple(self._forecast_response(row) for row in rows)
+
+    def history(
+        self,
+        zone_id: int,
+        end_utc: datetime,
+        hours: int,
+    ) -> tuple[ForecastResponse, ...]:
+        start_utc = end_utc - timedelta(hours=hours - 1)
+        with self._lock:
+            rows = self._connection.execute("""
+                SELECT f.zone_id, epoch(f.target_hour_utc), f.prediction,
+                       f.actual_trip_count, f.absolute_error,
+                       z.borough, z.zone_name, z.service_zone
+                FROM forecasts f
+                INNER JOIN served_zones z USING (zone_id)
+                WHERE f.zone_id = ?
+                  AND f.target_hour_utc BETWEEN to_timestamp(?) AND to_timestamp(?)
+                ORDER BY f.target_hour_utc
+            """, [zone_id, start_utc.timestamp(), end_utc.timestamp()]).fetchall()
+        return tuple(self._forecast_response(row) for row in rows)
 
 
 def _get_store(request: Request) -> PredictionStore:
@@ -540,6 +610,74 @@ def create_app(config_path: Path = Path("configs/api.json")) -> FastAPI:
                 ),
             )
         return result
+
+    @application.get("/rankings", response_model=RankingsResponse)
+    def rankings(
+        cutoff_utc: Annotated[
+            datetime,
+            Query(description="Forecast target hour in UTC"),
+        ],
+        store: Annotated[PredictionStore, Depends(_get_store)],
+        limit: Annotated[int, Query(ge=1, le=25)] = 10,
+    ) -> RankingsResponse:
+        cutoff = _validated_cutoff(cutoff_utc, store)
+        forecasts = store.rankings(cutoff, limit)
+        if not forecasts:
+            raise HTTPException(
+                status_code=404,
+                detail=f"rankings are unavailable at {cutoff.isoformat()}",
+            )
+        return RankingsResponse(
+            source=_SOURCE,
+            cutoff_utc=cutoff,
+            target_hour_utc=cutoff,
+            model_name=store.model_name,
+            model_version=store.model_version,
+            count=len(forecasts),
+            forecasts=list(forecasts),
+        )
+
+    @application.get("/history", response_model=HistoryResponse)
+    def history(
+        zone_id: Annotated[int, Query(ge=1)],
+        end_utc: Annotated[
+            datetime,
+            Query(description="Last included forecast hour in UTC"),
+        ],
+        store: Annotated[PredictionStore, Depends(_get_store)],
+        hours: Annotated[int, Query(ge=1, le=168)] = 24,
+    ) -> HistoryResponse:
+        end = _validated_cutoff(end_utc, store)
+        if zone_id not in store.zone_ids:
+            raise HTTPException(
+                status_code=404,
+                detail=f"zone_id {zone_id} is not available in the test predictions",
+            )
+        points = store.history(zone_id, end, hours)
+        if not points:
+            raise HTTPException(
+                status_code=404,
+                detail=(
+                    f"history is unavailable for zone_id {zone_id} at "
+                    f"{end.isoformat()}"
+                ),
+            )
+        latest = points[-1]
+        return HistoryResponse(
+            source=_SOURCE,
+            zone_id=latest.zone_id,
+            borough=latest.borough,
+            zone_name=latest.zone_name,
+            service_zone=latest.service_zone,
+            model_name=store.model_name,
+            model_version=store.model_version,
+            requested_hours=hours,
+            count=len(points),
+            start_utc=points[0].target_hour_utc,
+            end_utc=points[-1].target_hour_utc,
+            mae=sum(point.absolute_error for point in points) / len(points),
+            points=list(points),
+        )
 
     return application
 

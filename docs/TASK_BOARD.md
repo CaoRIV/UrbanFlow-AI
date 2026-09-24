@@ -23,7 +23,7 @@ Quy ước: `[ ]` chưa làm, `[x]` xong sau khi đã kiểm tra. Giao một mã
 ## Tuần 4
 
 - [x] **W4-T1** — FastAPI `GET /health`, `GET /zones`, `GET /forecast?cutoff_utc=...&zone_id=...`; response có `target_hour_utc`, `prediction`, `model_version`, nguồn backtest. Test input lỗi.
-- [ ] **W4-T2** — Vue trang demo: chọn cutoff test, top zones, line chart prediction/actual, MAE và chú thích historical backtest.
+- [x] **W4-T2** — Vue trang demo: chọn cutoff test, top zones, line chart prediction/actual, MAE và chú thích historical backtest.
 - [ ] **W4-T3** — README end-to-end, script chạy API/UI, screenshot và walkthrough demo.
 
 ## Tuần 5–6 (nếu có)
@@ -239,3 +239,27 @@ Vấn đề còn lại / quyết định:
   khớp error-analysis report.
 - Giới hạn: API chỉ phục vụ historical test predictions, không phải inference real
   time. Task tiếp theo: W4-T2 Vue dashboard.
+
+### W4-T2 — 2026-09-24
+
+- Trạng thái: hoàn thành, chưa commit.
+- Thay đổi: thêm Vue 3 + Vite + TypeScript trong `web/`; dashboard có cutoff UTC,
+  zone selector, bốn KPI, chart 24 giờ forecast/actual, top 10 zones, provenance
+  model và disclosure historical backtest luôn hiển thị.
+- Mở rộng API bằng `/rankings` và `/history` để dashboard lấy ranking/cửa sổ thời
+  gian bằng hai query DuckDB thay vì phát sinh hàng trăm request `/forecast`; contract
+  giới hạn top 25 zones và history 168 giờ, giữ cùng validation UTC/test window.
+- Trạng thái tải dùng skeleton/`aria-busy`; lỗi API hiển thị detail và Retry. Route
+  503 giả lập cho history đã hiện đúng error panel, giữ dữ liệu cũ và phục hồi sau Retry.
+- `tests/test_api.py` — 3 passed; test mới kiểm tra thứ tự ranking, chuỗi history, MAE,
+  zone/limit/hour errors. `npm run build` chạy `vue-tsc` và Vite thành công.
+- Live Chromium qua Vite proxy xác nhận `/health`, `/zones`, `/rankings`, `/history`
+  đều trả 200; chọn Times Sq/Theatre District và đổi cutoff sang `2026-03-31T12:00Z`
+  cập nhật chart/KPI (prediction `113.1`, actual `86`) không có page error.
+- Ảnh desktop thật lưu tại `docs/screenshots/w4-t2-dashboard.png`; README và API
+  data contract đã có lệnh chạy bằng `.venv`, endpoint mới và cảnh báo không real time.
+- Visual check tại 375/768/1024/1440 px không có page-level horizontal overflow;
+  axe-core desktop/mobile có 0 violations. SVG axis labels cần manual review của axe;
+  contrast tính trực tiếp là `4.685:1`, đạt WCAG AA cho text thường.
+- Giới hạn: dashboard chỉ đọc locked Q1/2026 test artifacts. Task tiếp theo W4-T3
+  hoàn thiện script chạy chung và walkthrough end-to-end.
