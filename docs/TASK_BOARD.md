@@ -18,7 +18,7 @@ Quy ước: `[ ]` chưa làm, `[x]` xong sau khi đã kiểm tra. Giao một mã
 
 - [x] **W3-T1** — Tạo calendar + lag 1/24/168h, rolling shift theo zone; test không rò rỉ tương lai.
 - [x] **W3-T2** — Train model CPU nhỏ, dùng validation để chọn một cấu hình; khóa test, lưu model/config/metrics.
-- [ ] **W3-T3** — Model card: bảng baseline/model test, lỗi theo zone/giờ, giới hạn; chọn model phục vụ một cách trung thực.
+- [x] **W3-T3** — Model card: bảng baseline/model test, lỗi theo zone/giờ, giới hạn; chọn model phục vụ một cách trung thực.
 
 ## Tuần 4
 
@@ -183,3 +183,32 @@ Vấn đề còn lại / quyết định:
   XGBoost 3.2.0. Artifacts đã import vào `artifacts/model/` và bị Git ignore.
 - Giới hạn: kết quả là historical backtest Q1/2026; chưa đánh giá ngoài thời gian này.
   Task tiếp theo: W3-T3 model card và phân tích lỗi theo zone/giờ.
+
+### W3-T3 — 2026-09-24
+
+- Trạng thái: hoàn thành, chưa commit.
+- Thay đổi: thêm `configs/model_analysis.json`, `urbanflow.analyze_model`, ba test
+  hành vi và `docs/model-card.md`; báo cáo JSON chi tiết nằm trong
+  `artifacts/model/error-analysis.json` và bị Git ignore.
+- Integrity gate xác minh schema, size/SHA-256, baseline metrics đúng bản dùng khi
+  train, 100.992 model/baseline test keys duy nhất, actual khớp và prediction đã clip
+  không âm trước khi phân tích.
+- Metric tính lại từ predictions: XGBoost MAE `3.766444`, WAPE `0.191241`;
+  seasonal naive MAE `4.675301`, WAPE `0.237388`; cải thiện tương đối `19.4395%`.
+- Residual XGBoost: 33.784 underprediction, 62.948 overprediction, 4.260 exact;
+  4.382/100.992 raw predictions âm được clip về zero. Absolute-error
+  p50/p90/p95/p99 là `0.865562`/`8.747569`/`17.723190`/`47.927626`.
+- Theo zone MAE, model tốt hơn baseline tại 214/263 zones, hòa 0 và kém hơn tại
+  49 zones. Model MAE cao nhất ở Midtown Center (`35.287481`); regression lớn nhất
+  ở Battery Park City (`6.492402` so với baseline `6.195312`).
+- Quyết định phục vụ `xgboost_bed2c66982d2`: test MAE thấp hơn baseline; test không
+  dùng để đổi feature, candidate hoặc 305 boost rounds. API/UI phải giữ nhãn
+  historical backtest và model version này.
+- Đã chạy command dữ liệu thật thành công; `tests/test_analyze_model.py` — 3 passed;
+  `pip check` và `git diff --check` thành công. Full suite local: 30 passed, 1 failed
+  vì venv thiếu NumPy/XGBoost cho test W3-T2; model test tương ứng đã chạy 3 passed
+  trên Colab Python 3.11.16 trong W3-T2.
+- Truy vấn DuckDB độc lập khớp 100.992 rows/keys, overall MAE/WAPE, residual counts,
+  214/0/49 zone wins/ties/regressions và regression lớn nhất tại zone 13.
+- Giới hạn: chỉ là historical backtest Q1/2026; chưa đo drift hoặc chất lượng ngoài
+  kỳ này. Task tiếp theo: W4-T1 API phục vụ artifact đã khóa.
