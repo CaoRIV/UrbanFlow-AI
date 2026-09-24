@@ -131,6 +131,18 @@ def test_api_contract_serves_locked_backtest_prediction(tmp_path: Path) -> None:
             "/forecast",
             params={"cutoff_utc": "2026-03-16T04:00:00Z", "zone_id": 1},
         )
+        rankings = client.get(
+            "/rankings",
+            params={"cutoff_utc": "2026-03-16T04:00:00Z", "limit": 2},
+        )
+        history = client.get(
+            "/history",
+            params={
+                "zone_id": 1,
+                "end_utc": "2026-03-16T05:00:00Z",
+                "hours": 2,
+            },
+        )
 
     assert health.status_code == 200
     assert health.json() == {
@@ -178,6 +190,22 @@ def test_api_contract_serves_locked_backtest_prediction(tmp_path: Path) -> None:
         "model_name": "xgboost_hist_cpu",
         "model_version": "xgboost_fixture",
     }
+    assert rankings.status_code == 200
+    ranking_payload = rankings.json()
+    assert ranking_payload["cutoff_utc"] == "2026-03-16T04:00:00Z"
+    assert ranking_payload["count"] == 2
+    assert [item["zone_id"] for item in ranking_payload["forecasts"]] == [1, 2]
+    assert [item["prediction"] for item in ranking_payload["forecasts"]] == [5.0, 0.0]
+
+    assert history.status_code == 200
+    history_payload = history.json()
+    assert history_payload["zone_id"] == 1
+    assert history_payload["requested_hours"] == 2
+    assert history_payload["count"] == 2
+    assert history_payload["start_utc"] == "2026-03-16T04:00:00Z"
+    assert history_payload["end_utc"] == "2026-03-16T05:00:00Z"
+    assert history_payload["mae"] == 1.5
+    assert [point["prediction"] for point in history_payload["points"]] == [5.0, 6.0]
 
 
 def test_forecast_rejects_invalid_time_and_zone_inputs(tmp_path: Path) -> None:
@@ -229,6 +257,26 @@ def test_forecast_rejects_invalid_time_and_zone_inputs(tmp_path: Path) -> None:
         assert client.get(
             "/forecast",
             params={"cutoff_utc": "2026-03-16T04:00:00Z", "zone_id": 0},
+        ).status_code == 422
+        assert client.get(
+            "/rankings",
+            params={"cutoff_utc": "2026-03-16T04:00:00Z", "limit": 0},
+        ).status_code == 422
+        assert client.get(
+            "/history",
+            params={
+                "zone_id": 3,
+                "end_utc": "2026-03-16T04:00:00Z",
+                "hours": 2,
+            },
+        ).status_code == 404
+        assert client.get(
+            "/history",
+            params={
+                "zone_id": 1,
+                "end_utc": "2026-03-16T04:00:00Z",
+                "hours": 169,
+            },
         ).status_code == 422
 
 

@@ -1,6 +1,6 @@
 # UrbanFlow AI — bộ tài liệu khởi động
 
-Mục tiêu: ứng dụng dự báo **số lượt đón khách Yellow Taxi trong giờ kế tiếp theo taxi zone tại NYC**, có API và dashboard để trình bày trong CV. Pipeline historical backtest và model card đã hoàn thành; API/UI chưa triển khai.
+Mục tiêu: ứng dụng dự báo **số lượt đón khách Yellow Taxi trong giờ kế tiếp theo taxi zone tại NYC**, có API và dashboard để trình bày trong CV. Pipeline historical backtest, model card, FastAPI và dashboard Vue đã triển khai; đây vẫn là demo đánh giá lịch sử, không phải hệ thống real time.
 
 ## Thiết lập môi trường phát triển
 
@@ -154,6 +154,8 @@ OpenAPI UI nằm tại `http://127.0.0.1:8000/docs`. Các endpoint:
 - `GET /health`: model/version, test window và số prediction rows đã load.
 - `GET /zones`: 263 zones thực sự có prediction, sắp theo `zone_id`.
 - `GET /forecast?cutoff_utc=2026-03-16T04:00:00Z&zone_id=161`.
+- `GET /rankings?cutoff_utc=2026-03-16T04:00:00Z&limit=10`: top zones theo prediction.
+- `GET /history?zone_id=161&end_utc=2026-03-17T03:00:00Z&hours=24`: chuỗi prediction/actual và MAE của cửa sổ.
 
 `cutoff_utc` là biên exclusive của dữ liệu đã quan sát và đồng thời là đầu giờ
 đích, nên response trên có `target_hour_utc = 2026-03-16T04:00:00Z`. API chỉ
@@ -180,6 +182,34 @@ và luôn gắn `source = historical_backtest`. Ví dụ response:
 Khi startup, API đối chiếu serving decision, SHA-256 của predictions/zone lookup,
 schema, test window, full-grid dimensions và khóa duy nhất trước khi nhận request.
 API đọc prediction đã khóa bằng DuckDB; không load XGBoost hoặc train lại model.
+
+### Chạy dashboard Vue W4-T2
+
+Giữ API ở terminal thứ nhất bằng đúng Python trong virtual environment:
+
+```powershell
+./.venv/Scripts/python.exe -m uvicorn urbanflow.api:app --host 127.0.0.1 --port 8000
+```
+
+Chạy Vite ở terminal thứ hai; dev server proxy `/api` sang FastAPI tại port 8000:
+
+```powershell
+cd web
+npm install
+npm run dev
+```
+
+Mở `http://127.0.0.1:5173`. Dashboard khởi tạo tại giờ cuối của test window,
+cho phép chọn cutoff UTC và zone, hiển thị top 10 zones, chart 24 giờ forecast/actual,
+prediction, actual, absolute error và rolling MAE. Banner `Historical backtest` luôn
+hiển thị để tránh diễn giải thành forecast live. Kiểm tra TypeScript và production build:
+
+```powershell
+cd web
+npm run build
+```
+
+Ảnh demo desktop: [`docs/screenshots/w4-t2-dashboard.png`](docs/screenshots/w4-t2-dashboard.png).
 
 Kiểm tra pipeline bằng dữ liệu toy (không tải TLC):
 

@@ -85,8 +85,11 @@
 - `cutoff_utc` là biên exclusive của lịch sử đã quan sát (`hour < cutoff`) và là
   `target_hour_utc` của interval `[cutoff, cutoff + 1h)`. Chỉ nhận giờ tròn với
   offset UTC `Z`/`+00:00` trong test window half-open đã khóa.
-- `/zones` chỉ trả zone xuất hiện trong serving predictions. `/forecast` trả
-  prediction, actual backtest, absolute error, zone metadata, model name/version và
+- `/zones` chỉ trả zone xuất hiện trong serving predictions. `/forecast` trả một
+  zone-hour. `/rankings` trả tối đa 25 zone xếp theo prediction cho một cutoff;
+  `/history` trả tối đa 168 giờ liên tiếp của một zone, theo thứ tự UTC, cùng MAE
+  tính trực tiếp trên các điểm trả về. Các endpoint luôn trả prediction, actual
+  backtest, absolute error, zone metadata, model name/version và
   `source = historical_backtest`; đây không phải dự báo production hoặc real time.
 - Timestamp thiếu timezone/sai offset/không tròn giờ/ngoài test trả `422`; zone không
   được phục vụ trả `404`. Thiếu query hoặc sai kiểu dùng schema lỗi chuẩn FastAPI.
