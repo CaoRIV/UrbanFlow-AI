@@ -1,0 +1,34 @@
+{
+  "feature_config": "features.json",
+  "baseline_metrics_path": "../artifacts/baseline/metrics.json",
+  "model_path": "../artifacts/model/xgboost-model.json",
+  "manifest_path": "../artifacts/model/model-manifest.json",
+  "predictions_path": "../artifacts/model/predictions.parquet",
+  "metrics_path": "../artifacts/model/metrics.json",
+  "seed": 42,
+  "threads": 2,
+  "minimum_available_memory_mb": 2048,
+  "maximum_process_rss_mb": 4096,
+  "max_boost_rounds": 500,
+  "early_stopping_rounds": 30,
+  "candidates": [
+    {
+      "name": "depth4",
+      "max_depth": 4,
+      "learning_rate": 0.08,
+      "min_child_weight": 5.0,
+      "subsample": 0.8,
+      "colsample_bytree": 0.8,
+      "reg_lambda": 1.0
+    },
+    {
+      "name": "depth6",
+      "max_depth": 6,
+      "learning_rate": 0.05,
+      "min_child_weight": 5.0,
+      "subsample": 0.8,
+      "colsample_bytree": 0.8,
+      "reg_lambda": 1.0
+    }
+  ]
+}
