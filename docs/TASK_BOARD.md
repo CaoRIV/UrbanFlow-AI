@@ -17,7 +17,7 @@ Quy ước: `[ ]` chưa làm, `[x]` xong sau khi đã kiểm tra. Giao một mã
 ## Tuần 3
 
 - [x] **W3-T1** — Tạo calendar + lag 1/24/168h, rolling shift theo zone; test không rò rỉ tương lai.
-- [ ] **W3-T2** — Train model CPU nhỏ, dùng validation để chọn một cấu hình; khóa test, lưu model/config/metrics.
+- [x] **W3-T2** — Train model CPU nhỏ, dùng validation để chọn một cấu hình; khóa test, lưu model/config/metrics.
 - [ ] **W3-T3** — Model card: bảng baseline/model test, lỗi theo zone/giờ, giới hạn; chọn model phục vụ một cách trung thực.
 
 ## Tuần 4
@@ -137,7 +137,7 @@ Vấn đề còn lại / quyết định:
 
 ### W3-T1 — 2026-09-23
 
-- Trạng thái: hoàn thành trên nhánh `develop`, chưa commit.
+- Trạng thái: hoàn thành trên nhánh `develop`, commit `3643c04`.
 - Thay đổi: thêm `configs/features.json` và `urbanflow.build_features`; tạo
   calendar UTC, lag 1/24/168h, rolling mean 24/168h chỉ từ các hàng trước target,
   rồi gắn đúng split đã khóa. Không dùng `source_status` làm feature.
@@ -155,3 +155,31 @@ Vấn đề còn lại / quyết định:
 - Một lần chạy ghi nhận 1.903 giây, RSS đỉnh 525,185,024 bytes, DuckDB 2 threads /
   1 GB; output Parquet 3,936,369 bytes. Không có seed vì phép biến đổi xác định.
 - Chưa train model hoặc thay metric baseline trong task này. Task tiếp theo: W3-T2.
+
+### W3-T2 — 2026-09-24
+
+- Trạng thái: hoàn thành trên nhánh `develop`, chưa commit.
+- Thay đổi: thêm `configs/model.json`, `urbanflow.train_model`, test cô lập test
+  target, memory guard, bundle builder và notebook Colab CPU. Sửa conversion validity
+  mask PyArrow bằng `zero_copy_only=False` sau lỗi integration đầu tiên.
+- Chọn model chỉ bằng validation: `depth4` đạt MAE `4.367897`, WAPE
+  `0.210714`, 212 rounds; `depth6` đạt MAE `4.226789`, WAPE `0.203907`,
+  305 rounds nên được chọn. Seed 42, 2 threads.
+- Sau khi khóa cấu hình và fit lại trên train + validation, test đạt MAE
+  `3.766444`, WAPE `0.191241`; baseline cùng test là MAE `4.675301`,
+  WAPE `0.237388`, tương ứng cải thiện `19.4395%` cho cả hai metric.
+- Input giữ hash feature W3-T1
+  `b089d90c160c71d2f71c3bc53da1528cd5edcef195598f334c79eaf32f10fe99`;
+  model version `xgboost_bed2c66982d2`, model SHA-256
+  `bed2c66982d253e0d05e2f97d7afbc318c87498f3a64174c53411a264ffd3ea2`.
+- Test model trên Colab Python 3.11.16: 3 passed. Test thay toàn bộ test targets
+  và xác nhận candidate, rounds, model hash, validation/test predictions không đổi;
+  chỉ test metric thay đổi. Preflight thiếu RAM và cấu hình >4 threads đều bị từ chối.
+- Kiểm tra độc lập archive/model/manifest/config/input hashes đều khớp. Predictions có
+  195,409 rows = 195,409 khóa duy nhất, không NULL, prediction không âm; split row
+  counts và MAE/WAPE tính lại từ Parquet khớp report.
+- Colab train 50.892 giây; RSS đỉnh 451,014,656 bytes; available RAM thấp nhất
+  11,961,393,152 bytes. Versions: NumPy 2.4.6, SciPy 1.17.1, PyArrow 23.0.1,
+  XGBoost 3.2.0. Artifacts đã import vào `artifacts/model/` và bị Git ignore.
+- Giới hạn: kết quả là historical backtest Q1/2026; chưa đánh giá ngoài thời gian này.
+  Task tiếp theo: W3-T3 model card và phân tích lỗi theo zone/giờ.

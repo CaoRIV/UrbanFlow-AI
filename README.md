@@ -99,6 +99,33 @@ toàn bộ lịch sử không NULL; lịch sử thiếu được giữ NULL, kh�
 `artifacts/features/feature-report.json` lưu schema, hash, số hàng usable theo
 split và tài nguyên chạy.
 
+Train model CPU bằng `configs/model.json`. Lệnh có memory guard và sẽ dừng trước
+khi train nếu RAM khả dụng dưới 2 GB:
+
+```powershell
+python -m urbanflow.train_model --config configs/model.json
+```
+
+Với máy 8 GB không đủ RAM khi Orca đang mở, tạo bundle Colab rồi chạy notebook
+`notebooks/train_model_colab.ipynb` trên CPU runtime:
+
+```powershell
+python -m urbanflow.prepare_colab --config configs/model.json
+```
+
+Upload `artifacts/colab/urbanflow-colab-input.zip` trong cell đầu tiên. Notebook
+xác minh checksum, tạo Python 3.11 environment, chạy model tests và full suite trước
+khi train, sau đó tải về `urbanflow-model-artifacts.zip`.
+
+Kết quả W3-T2 trên cùng split Q1/2026 chọn `depth6` bằng validation MAE:
+`4.226789` (WAPE `0.203907`), tốt hơn candidate `depth4` có MAE
+`4.367897`. Sau khi khóa cấu hình và fit lại trên train + validation, test đạt
+MAE `3.766444`, WAPE `0.191241`; seasonal-naive baseline tương ứng là MAE
+`4.675301`, WAPE `0.237388` (cải thiện tương đối `19.4395%`). Model version
+`xgboost_bed2c66982d2` dùng seed 42, 2 threads và 305 boost rounds. Artifacts
+nằm trong `artifacts/model/`; đây vẫn là historical backtest, không phải forecast
+production hoặc bằng chứng chất lượng ngoài Q1/2026.
+
 Kiểm tra pipeline bằng dữ liệu toy (không tải TLC):
 
 ```powershell
