@@ -1,0 +1,22 @@
+{
+  "pyproject_path": "../pyproject.toml",
+  "api_config_path": "api.json",
+  "report_paths": [
+    "../data/raw/download_manifest.json",
+    "../artifacts/eda/2026-01-quality.json",
+    "../artifacts/etl/hourly-aggregate-report.json",
+    "../artifacts/etl/hourly-grid-report.json",
+    "../artifacts/baseline/metrics.json",
+    "../artifacts/features/feature-report.json",
+    "../artifacts/model/model-manifest.json",
+    "../artifacts/model/metrics.json",
+    "../artifacts/model/error-analysis.json",
+    "../artifacts/reliability/pipeline-run.json"
+  ],
+  "artifact_roots": [
+    "../data/raw",
+    "../data/processed",
+    "../artifacts"
+  ],
+  "output_path": "../artifacts/reliability/w5-t1-report.json"
+}
