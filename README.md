@@ -1,192 +1,308 @@
-# UrbanFlow AI — bộ tài liệu khởi động
+<div align="center">
+  <h1>UrbanFlow AI</h1>
+  <p><strong>Dự báo lượt đón Yellow Taxi theo taxi zone cho giờ kế tiếp tại New York City</strong></p>
+  <p>Reproducible ML pipeline · Historical backtest · FastAPI · Vue dashboard</p>
 
-Mục tiêu: ứng dụng dự báo **số lượt đón khách Yellow Taxi trong giờ kế tiếp theo taxi zone tại NYC**, có API và dashboard để trình bày trong CV. Pipeline historical backtest, model card, FastAPI và dashboard Vue đã triển khai; đây vẫn là demo đánh giá lịch sử, không phải hệ thống real time.
+  <p>
+    <img alt="Version 0.1.0" src="https://img.shields.io/badge/version-0.1.0-6C63FF?style=flat-square">
+    <img alt="Windows PowerShell" src="https://img.shields.io/badge/platform-Windows-0078D4?style=flat-square&logo=windows11&logoColor=white">
+    <a href="https://www.python.org/"><img alt="Python 3.11" src="https://img.shields.io/badge/Python-3.11-3776AB?style=flat-square&logo=python&logoColor=white"></a>
+    <a href="https://fastapi.tiangolo.com/"><img alt="FastAPI 0.141.1" src="https://img.shields.io/badge/FastAPI-0.141.1-009688?style=flat-square&logo=fastapi&logoColor=white"></a>
+    <a href="https://vuejs.org/"><img alt="Vue 3.5.43" src="https://img.shields.io/badge/Vue-3.5.43-42B883?style=flat-square&logo=vuedotjs&logoColor=white"></a>
+    <a href="https://duckdb.org/"><img alt="DuckDB 1.5.5" src="https://img.shields.io/badge/DuckDB-1.5.5-FFF000?style=flat-square&logo=duckdb&logoColor=111111"></a>
+    <a href="https://xgboost.ai/"><img alt="XGBoost 3.2.0" src="https://img.shields.io/badge/XGBoost-3.2.0-EB5B2D?style=flat-square"></a>
+    <a href="#verification"><img alt="Tests 36 passed" src="https://img.shields.io/badge/tests-36%20passed-78C900?style=flat-square&logo=pytest&logoColor=white"></a>
+    <a href="#scope"><img alt="Historical backtest" src="https://img.shields.io/badge/status-historical%20backtest-6C63FF?style=flat-square"></a>
+  </p>
 
-## Thiết lập môi trường phát triển
+  <p>
+    <a href="#overview">Tổng quan</a> ·
+    <a href="#architecture">Kiến trúc</a> ·
+    <a href="#results">Kết quả</a> ·
+    <a href="#quick-start">Quick start</a> ·
+    <a href="#api">API</a> ·
+    <a href="#reproducibility">Tái lập</a>
+  </p>
+</div>
 
-Yêu cầu Python 3.11. Trên PowerShell:
+---
+
+> [!IMPORTANT]
+> UrbanFlow AI là **historical backtest trên dữ liệu Q1/2026**, không phải hệ thống dự báo live hoặc production. API và dashboard chỉ phục vụ các prediction đã khóa trong test window.
+
+<a id="overview"></a>
+## Tổng quan
+
+UrbanFlow AI xây dựng một pipeline end-to-end để dự báo số lượt đón Yellow Taxi được ghi nhận cho từng taxi zone trong giờ kế tiếp.
+
+| Thành phần | Contract |
+| --- | --- |
+| Đơn vị dự báo | `zone_id × target_hour_utc` |
+| Target | `trip_count` trong giờ `[target_hour_utc, target_hour_utc + 1h)` |
+| Thông tin đầu vào | Chỉ dữ liệu khả dụng trước `target_hour_utc` |
+| Nguồn dữ liệu | NYC TLC Yellow Taxi Parquet và Taxi Zone Lookup |
+| Múi giờ nội bộ | UTC; dữ liệu nguồn được xử lý DST trước khi đổi từ `America/New_York` |
+| Đánh giá | Time split cố định; chọn model bằng validation, test chỉ dùng một lần sau khi khóa cấu hình |
+| Serving | FastAPI đọc prediction artifact bằng DuckDB; không load hoặc train XGBoost khi nhận request |
+
+### Điểm nổi bật
+
+- ETL theo tháng, chọn đúng cột cần thiết và giới hạn DuckDB ở 2 threads / 1 GB.
+- Full hourly grid phân biệt giờ có `0` chuyến với giờ nguồn bị thiếu hoặc mơ hồ do DST.
+- Feature leakage-safe gồm calendar UTC, lag 1/24/168 giờ và rolling mean 24/168 giờ; mọi rolling đều kết thúc tại `target_hour_utc - 1h`.
+- Seasonal-naive 168 giờ làm baseline bắt buộc trước khi đánh giá XGBoost.
+- Artifact có schema, row count, SHA-256, provenance, resource measurements và model card.
+- FastAPI + Vue dashboard phục vụ snapshot, ranking, lịch sử forecast/actual và disclosure historical backtest.
+- Reliability gate kiểm tra exact dependency pins, report chain, hash/size, artifact footprint và serving store.
+
+<a id="architecture"></a>
+## Kiến trúc
+
+```mermaid
+flowchart LR
+    A[NYC TLC Parquet<br/>Q1 2026] --> B[Download + schema/hash validation]
+    Z[Taxi Zone Lookup] --> B
+    B --> C[Monthly hourly aggregation]
+    C --> D[Full zone × hour grid]
+    D --> E[Seasonal-naive baseline]
+    D --> F[Leakage-safe features]
+    F --> G[XGBoost CPU training]
+    E --> H[Locked evaluation]
+    G --> H
+    H --> I[Predictions + metrics<br/>manifest + model card]
+    I --> J[FastAPI + DuckDB]
+    J --> K[Vue dashboard]
+```
+
+### Luồng dữ liệu
+
+1. Downloader xác minh URL, schema, row count, kích thước và SHA-256 của từng file nguồn.
+2. ETL aggregate pickup theo zone và giờ local, xử lý DST, sau đó chuẩn hóa sang UTC.
+3. Full grid giữ riêng `available`, `source_missing` và `dst_ambiguous`; chỉ giờ có nguồn hợp lệ mới được điền zero.
+4. Feature builder tạo lag/rolling trên full grid và giữ target tách khỏi feature.
+5. Model selection dùng validation MAE; WAPE và tên candidate chỉ dùng để phá hòa.
+6. Test predictions được khóa, phân tích lỗi và phục vụ trực tiếp qua API.
+
+## Dashboard
+
+<p align="center">
+  <img src="docs/screenshots/w4-t3-dashboard.png" alt="UrbanFlow AI historical backtest dashboard" width="100%">
+</p>
+
+Dashboard hỗ trợ:
+
+- chọn cutoff UTC nằm trong test window;
+- xem forecast và actual theo taxi zone;
+- xếp hạng top zones theo prediction;
+- biểu đồ 24 giờ forecast/actual và MAE cửa sổ;
+- hiển thị model version, test window và cảnh báo historical backtest trên mọi snapshot.
+
+<a id="results"></a>
+## Kết quả đã xác minh
+
+### Model đã khóa
+
+| Artifact | Validation MAE | Validation WAPE | Test MAE | Test WAPE |
+| --- | ---: | ---: | ---: | ---: |
+| Seasonal naive 168h | 6.397990 | 0.308649 | 4.675301 | 0.237388 |
+| XGBoost `xgboost_bd51e85845a0` | **4.204104** | **0.202812** | **3.755908** | **0.190706** |
+
+XGBoost giảm test MAE và WAPE **19.6649%** so với seasonal-naive trên cùng 100,992 hàng test. Candidate `depth6` được chọn bằng validation, sau đó fit lại trên train + validation với seed 42, 2 threads và 431 boost rounds.
+
+### Reliability và serving
+
+| Chỉ số | Giá trị đo được |
+| --- | ---: |
+| Test prediction rows | 100,992 |
+| Taxi zones | 263 |
+| Test target hours | 384 |
+| Model train time | 55.088 giây |
+| Model process RSS peak | 349,003,776 bytes |
+| PredictionStore startup | 140.427 ms |
+| Forecast median, 10 runs | 2.756 ms |
+| History 24h median, 10 runs | 4.696 ms |
+| Rankings median, 10 runs | 3.199 ms |
+| Report references verified | 38 |
+| Artifact footprint | 44 files · 208,863,175 bytes |
+| Automated tests | 36 passed |
+
+Các benchmark query gọi trực tiếp `PredictionStore`, không bao gồm HTTP hoặc browser overhead. Median đều dưới 10 ms nên pipeline không thêm cache phục vụ chưa cần thiết.
+
+<a id="quick-start"></a>
+## Quick start
+
+### Yêu cầu
+
+- Windows PowerShell;
+- Python `>=3.11,<3.12`;
+- Node.js 22+ và npm cho dashboard;
+- khoảng trống đĩa phù hợp cho raw/processed artifacts; các file này không được commit.
+
+### 1. Tạo Python environment
+
+Từ repository root:
 
 ```powershell
 py -3.11 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 python -m pip install -e ".[dev]"
-python -m pytest
 ```
 
-Smoke test tạo một bảng Arrow nhỏ và xác minh DuckDB aggregate đúng kết quả. Bước này không tải hoặc tạo dữ liệu TLC.
-
-### Chạy lại pipeline và reliability gate
-
-Runner W5-T1 kiểm tra exact dependency pins/imports, `pip check`, rồi chạy tuần tự
-download/verify → EDA → aggregate → grid → baseline → features → train → analysis:
+### 2. Chạy pipeline đầy đủ
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\run_pipeline.ps1
+```
 
-# Chỉ xác minh environment, report hashes/sizes, artifact footprint và serving store
-powershell -ExecutionPolicy Bypass -File .\scripts\run_pipeline.ps1 -VerifyOnly
+Runner kiểm tra exact dependency pins/imports và `pip check`, sau đó chạy tuần tự:
 
-# Tiếp tục từ train sau khi một stage trước đã hoàn tất (stage index 0..7)
+```text
+download/verify → EDA → aggregate → grid → baseline → features → train → analysis
+```
+
+Nếu memory guard dừng stage train, giải phóng RAM rồi tiếp tục đúng stage lỗi:
+
+```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\run_pipeline.ps1 -StartStage 6
 ```
 
-Mỗi stage ghi log riêng trong `artifacts/reliability/logs/`; run report nằm tại
-`artifacts/reliability/pipeline-run.json`, còn báo cáo tổng hợp nằm tại
-`artifacts/reliability/w5-t1-report.json`. Runner dừng ngay khi dependency, stage,
-checksum, size, schema hoặc API-store validation thất bại.
+### 3. Cài dashboard dependencies
 
-## Tải dữ liệu thô
+```powershell
+cd web
+npm install
+cd ..
+```
 
-Cấu hình W2-T1 chọn ba tháng Yellow Taxi liên tiếp cùng taxi zone lookup. Từ repository root:
+### 4. Chạy demo
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\start_demo.ps1
+```
+
+Launcher chạy FastAPI tại `http://127.0.0.1:8000`, Vite tại `http://127.0.0.1:5173`, đợi cả hai health check rồi mở browser. `Ctrl+C` dừng cả hai process tree.
+
+Các chế độ kiểm tra không cần thao tác thủ công:
+
+```powershell
+# Kiểm tra Python, npm, artifacts, checksum, schema và ports; không mở service
+powershell -ExecutionPolicy Bypass -File .\scripts\start_demo.ps1 -CheckOnly
+
+# Khởi động API/UI, kiểm tra HTTP trực tiếp và qua Vite proxy, rồi tự cleanup
+powershell -ExecutionPolicy Bypass -File .\scripts\start_demo.ps1 -SmokeTest
+
+# Chạy service nhưng không tự mở browser
+powershell -ExecutionPolicy Bypass -File .\scripts\start_demo.ps1 -NoBrowser
+```
+
+<a id="reproducibility"></a>
+## Pipeline và tái lập
+
+### Reliability runner
+
+```powershell
+# Chỉ kiểm tra environment, report chain, artifact sizes/hashes và API store
+powershell -ExecutionPolicy Bypass -File .\scripts\run_pipeline.ps1 -VerifyOnly
+
+# Tiếp tục từ một stage cụ thể, index 0..7
+powershell -ExecutionPolicy Bypass -File .\scripts\run_pipeline.ps1 -StartStage 6
+```
+
+| Stage | Index | Module | Config |
+| --- | ---: | --- | --- |
+| Download hoặc xác minh raw files | 0 | `urbanflow.download_data` | `configs/data_sources.json` |
+| Kiểm tra chất lượng tháng cấu hình | 1 | `urbanflow.inspect_data` | `configs/eda.json` |
+| Aggregate hourly pickups | 2 | `urbanflow.aggregate_hourly` | `configs/aggregate.json` |
+| Dựng full hourly grid | 3 | `urbanflow.build_hourly_grid` | `configs/grid.json` |
+| Đánh giá seasonal baseline | 4 | `urbanflow.evaluate_baseline` | `configs/baseline.json` |
+| Tạo leakage-safe features | 5 | `urbanflow.build_features` | `configs/features.json` |
+| Train model CPU | 6 | `urbanflow.train_model` | `configs/model.json` |
+| Phân tích locked test errors | 7 | `urbanflow.analyze_model` | `configs/model_analysis.json` |
+
+Mỗi stage ghi log vào `artifacts/reliability/logs/`. Run report và báo cáo tổng hợp nằm tại:
+
+- `artifacts/reliability/pipeline-run.json`;
+- `artifacts/reliability/w5-t1-report.json`.
+
+<details>
+<summary><strong>Chạy từng module thủ công</strong></summary>
 
 ```powershell
 python -m urbanflow.download_data --config configs/data_sources.json
-```
-
-Raw files và manifest được lưu trong `data/raw/` và không được commit. Downloader xác minh schema, số hàng, kích thước và SHA-256; lần chạy lại dùng file cache nếu checksum còn đúng. Kết quả nguồn và schema thực tế nằm trong [data card](docs/data-card.md).
-
-Kiểm tra chất lượng tháng đã tải mà không nạp toàn bộ cột vào RAM:
-
-```powershell
 python -m urbanflow.inspect_data --config configs/eda.json
-```
-
-Kết quả machine-readable nằm trong `artifacts/eda/`; bảng số liệu và quyết định lọc được lưu trong [data card](docs/data-card.md).
-
-Aggregate từng tháng thành observed hourly counts theo UTC:
-
-```powershell
 python -m urbanflow.aggregate_hourly --config configs/aggregate.json
-```
-
-Pipeline chỉ scan pickup timestamp và pickup zone, áp dụng lọc đã ghi trong data card, xử lý DST trước khi đổi UTC, rồi ghi Parquet theo tháng vào `data/processed/hourly_counts_observed/`. Đây chưa phải full grid; zero và source-missing được xử lý trong W2-T2.
-
-Dựng full hourly grid sau bước aggregate:
-
-```powershell
 python -m urbanflow.build_hourly_grid --config configs/grid.json
-```
-
-Output theo tháng nằm trong `data/processed/hourly_grid/`, báo cáo nằm tại
-`artifacts/etl/hourly-grid-report.json`. Config grid tham chiếu config aggregate để
-dùng cùng nguồn, timezone và giới hạn tài nguyên. Tập zone lấy từ lookup hợp lệ,
-không phụ thuộc zone có chuyến trong train/test. Khoảng thời gian lấy toàn bộ các
-tháng liên tiếp trong source config, từ đầu tháng local đầu tiên đến đầu tháng
-kế tiếp tháng cuối (exclusive), rồi dựng lưới theo UTC.
-
-Schema giữ `zone_id`, `target_hour_utc`, `trip_count`, `source_month` và thêm
-`source_status`: `available`, `source_missing`, hoặc `dst_ambiguous`.
-`trip_count` bằng `0` chỉ khi giờ có pickup nguồn nhưng zone không có chuyến hợp lệ;
-giờ thiếu nguồn hoặc mơ hồ do DST giữ `NULL`. Giờ nguồn có pickup chỉ ở zone bị
-loại vẫn được coi là có độ phủ. Đây là giả định độ phủ theo giờ, không phát hiện
-được mất dữ liệu một phần. Không dùng `source_status` của giờ đích làm feature.
-
-Pipeline kiểm tra observed counts khớp với raw/lookup trước khi ghi từng file.
-Thiếu file, schema sai, counts cũ hoặc tháng không liên tiếp sẽ báo lỗi. Mỗi file
-tháng được ghi atomic; nếu tháng sau thất bại, file tháng trước có thể đã cập nhật.
-Chỉ dùng toàn bộ output sau khi lệnh kết thúc thành công và báo cáo được ghi mới.
-
-Đánh giá seasonal-naive baseline trên các split UTC cố định:
-
-```powershell
 python -m urbanflow.evaluate_baseline --config configs/baseline.json
-```
-
-Config khóa train tại `[2026-01-01T05:00:00Z, 2026-03-01T05:00:00Z)`,
-validation tại `[2026-03-01T05:00:00Z, 2026-03-16T04:00:00Z)` và test tại
-`[2026-03-16T04:00:00Z, 2026-04-01T04:00:00Z)`. Dự báo chính là count cùng
-zone ở `target_hour_utc - 168h`. Khi lag thiếu, train chỉ dùng mean của chính
-zone từ các target sớm hơn; validation/test dùng zone mean fit trên train.
-
-Predictions nằm tại `artifacts/baseline/seasonal-naive-predictions.parquet`;
-`artifacts/baseline/metrics.json` lưu MAE/WAPE tổng thể, MAE theo zone và UTC
-hour, fallback rate, split boundaries và hash input/output. Target `NULL` không
-được chấm điểm; WAPE là `NULL` khi tổng actual bằng zero. Trên Q1/2026,
-validation đạt MAE `6.397990`, WAPE `0.308649`; test đạt MAE `4.675301`,
-WAPE `0.237388`. Đây là historical backtest, không phải dự báo real time.
-
-Tạo feature leakage-safe trên đúng full grid và split đã khóa:
-
-```powershell
 python -m urbanflow.build_features --config configs/features.json
-```
-
-Output `data/processed/features/hourly_features.parquet` giữ target và metadata
-riêng khỏi các feature: calendar UTC, lag 1/24/168 giờ và rolling mean 24/168 giờ.
-Mỗi rolling window kết thúc tại `target_hour_utc - 1h` và chỉ có giá trị khi đủ
-toàn bộ lịch sử không NULL; lịch sử thiếu được giữ NULL, không tự đổi thành zero.
-`artifacts/features/feature-report.json` lưu schema, hash, số hàng usable theo
-split và tài nguyên chạy.
-
-Train model CPU bằng `configs/model.json`. Memory guard đã được hiệu chỉnh theo lần
-chạy đo đạc: dừng nếu RAM khả dụng dưới 256 MiB hoặc process RSS vượt 1 GiB:
-
-```powershell
 python -m urbanflow.train_model --config configs/model.json
+python -m urbanflow.analyze_model --config configs/model_analysis.json
 ```
 
-Nếu máy không giữ được memory guard khi Orca hoặc ứng dụng khác đang mở, tạo bundle
-Colab rồi chạy notebook `notebooks/train_model_colab.ipynb` trên CPU runtime:
+Model config có memory guard: RAM khả dụng tối thiểu 256 MiB, process RSS tối đa 1 GiB và `threads = 2`.
+
+Nếu laptop không giữ được memory guard khi các ứng dụng khác đang mở, tạo bundle Colab CPU:
 
 ```powershell
 python -m urbanflow.prepare_colab --config configs/model.json
 ```
 
-Upload `artifacts/colab/urbanflow-colab-input.zip` trong cell đầu tiên. Notebook
-xác minh checksum, tạo Python 3.11 environment, chạy model tests và full suite trước
-khi train, sau đó tải về `urbanflow-model-artifacts.zip`.
+Upload `artifacts/colab/urbanflow-colab-input.zip` vào `notebooks/train_model_colab.ipynb`. Notebook xác minh checksum, tạo Python 3.11 environment và chạy test trước khi train.
 
-Kết quả rerun W5-T1 trên cùng split Q1/2026 và dependency pins hiện tại chọn
-`depth6` bằng validation MAE `4.204104` (WAPE `0.202812`), 431 boost rounds.
-Sau khi fit lại trên train + validation, test đạt MAE `3.755908`, WAPE `0.190706`;
-seasonal-naive baseline tương ứng là MAE `4.675301`, WAPE `0.237388` (cải thiện
-tương đối `19.6649%`). Model version `xgboost_bd51e85845a0` dùng seed 42 và 2
-threads. Artifacts nằm trong `artifacts/model/`; đây vẫn là historical backtest,
-không phải forecast production hoặc bằng chứng chất lượng ngoài Q1/2026.
+</details>
 
-Phân tích lỗi kiểm tra schema, checksum và khóa/actual giữa model với baseline trước
-khi tính lại metric trực tiếp từ predictions:
+## Dữ liệu và đánh giá
 
-```powershell
-python -m urbanflow.analyze_model --config configs/model_analysis.json
-```
+### Nguồn
 
-Báo cáo machine-readable được ghi vào `artifacts/model/error-analysis.json`;
-[model card](docs/model-card.md) ghi protocol chọn candidate, test comparison,
-residual, zone/hour yếu, provenance và giới hạn. Test chỉ quyết định artifact phục
-vụ; không được dùng để đổi feature, candidate hoặc boost rounds.
+- [NYC TLC Trip Record Data](https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page)
+- [Yellow Taxi Data Dictionary](https://www.nyc.gov/assets/tlc/downloads/pdf/data_dictionary_trip_records_yellow.pdf)
+- NYC TLC Taxi Zone Lookup
 
-### Kết quả đánh giá đã khóa
+V1 chỉ dùng `tpep_pickup_datetime` và `PULocationID` từ Yellow Taxi Parquet. Weather, event, traffic và live feed nằm ngoài phạm vi hiện tại.
 
-| Artifact | Validation MAE | Validation WAPE | Test MAE | Test WAPE |
-| --- | ---: | ---: | ---: | ---: |
-| Seasonal naive 168h | 6.397990 | 0.308649 | 4.675301 | 0.237388 |
-| XGBoost `xgboost_bd51e85845a0` | 4.204104 | 0.202812 | 3.755908 | 0.190706 |
+### Time split đã khóa
 
-Model được chọn bằng validation; test chỉ chạy cho cấu hình đã khóa. Test MAE giảm
-`19.6649%` so với seasonal naive trên cùng 100.992 hàng và cùng split thời gian.
-Các số liệu chỉ mô tả historical backtest Q1/2026, không chứng minh chất lượng live
-hoặc khả năng tổng quát sang mùa khác.
+| Split | UTC interval | Mục đích |
+| --- | --- | --- |
+| Train | `[2026-01-01T05:00:00Z, 2026-03-01T05:00:00Z)` | Fit candidate models |
+| Validation | `[2026-03-01T05:00:00Z, 2026-03-16T04:00:00Z)` | Chọn candidate và boost rounds |
+| Test | `[2026-03-16T04:00:00Z, 2026-04-01T04:00:00Z)` | Locked final evaluation |
 
-Khởi động API W4-T1 từ repository root sau khi đã tạo error-analysis report:
+Không random split. Test không được dùng để đổi feature, candidate parameters hoặc boost rounds.
+
+### Leakage safeguards
+
+- Target của hàng `target_hour_utc = h` là pickup count trong chính giờ `h`.
+- Lag dùng đúng `h - 1h`, `h - 24h`, `h - 168h` theo cùng zone.
+- Rolling 24/168 giờ chỉ dùng các hàng đến `h - 1h` và giữ `NULL` nếu lịch sử chưa đủ.
+- Calendar feature lấy từ UTC `target_hour_utc`; không dùng trạng thái nguồn hoặc actual của giờ đích.
+- Mọi transformation được chạy trên full grid trước khi lọc các hàng đủ feature.
+
+<a id="api"></a>
+## API
+
+Chạy riêng FastAPI:
 
 ```powershell
 python -m uvicorn urbanflow.api:app --host 127.0.0.1 --port 8000
 ```
 
-OpenAPI UI nằm tại `http://127.0.0.1:8000/docs`. Các endpoint:
+OpenAPI UI: `http://127.0.0.1:8000/docs`
 
-- `GET /health`: model/version, test window và số prediction rows đã load.
-- `GET /zones`: 263 zones thực sự có prediction, sắp theo `zone_id`.
-- `GET /forecast?cutoff_utc=2026-03-16T04:00:00Z&zone_id=161`.
-- `GET /rankings?cutoff_utc=2026-03-16T04:00:00Z&limit=10`: top zones theo prediction.
-- `GET /history?zone_id=161&end_utc=2026-03-17T03:00:00Z&hours=24`: chuỗi prediction/actual và MAE của cửa sổ.
+| Endpoint | Chức năng |
+| --- | --- |
+| `GET /health` | Model/version, test window, prediction rows và zone count |
+| `GET /zones` | Danh sách 263 zones được phục vụ |
+| `GET /forecast` | Forecast và actual cho một zone tại cutoff UTC |
+| `GET /rankings` | Top zones theo prediction tại cutoff |
+| `GET /history` | Chuỗi forecast/actual và MAE của một cửa sổ thời gian |
 
-`cutoff_utc` là biên exclusive của dữ liệu đã quan sát và đồng thời là đầu giờ
-đích, nên response trên có `target_hour_utc = 2026-03-16T04:00:00Z`. API chỉ
-chấp nhận giờ tròn UTC trong test window, trả `404` cho zone không được phục vụ,
-và luôn gắn `source = historical_backtest`. Ví dụ response:
+Ví dụ:
+
+```http
+GET /forecast?cutoff_utc=2026-03-16T04:00:00Z&zone_id=161
+```
 
 ```json
 {
@@ -205,86 +321,79 @@ và luôn gắn `source = historical_backtest`. Ví dụ response:
 }
 ```
 
-Khi startup, API đối chiếu serving decision, SHA-256 của predictions/zone lookup,
-schema, test window, full-grid dimensions và khóa duy nhất trước khi nhận request.
-API đọc prediction đã khóa bằng DuckDB; không load XGBoost hoặc train lại model.
+`cutoff_utc` đồng thời là đầu giờ đích. API chỉ nhận giờ tròn UTC trong test window, trả `404` cho zone không được phục vụ và `422` cho input sai schema.
 
-### Chạy demo end-to-end W4-T3
-
-Yêu cầu: Python 3.11 environment đã cài theo phần đầu README, Node.js 22+, artifact
-model hiện tại trong `artifacts/model/`, taxi zone lookup trong `data/raw/`, và một
-lần cài frontend dependency:
+<a id="verification"></a>
+## Kiểm thử và quality gates
 
 ```powershell
+# Python tests
+python -m pytest -q
+
+# Frontend typecheck + production build
 cd web
-npm install
-cd ..
+npm run build
 ```
 
-Từ repository root, chạy một lệnh để khởi động FastAPI, Vite và mở dashboard:
+Test suite bao phủ:
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\start_demo.ps1
+- ETL schema, monthly boundaries và zone mapping;
+- full-grid zero/source-missing/DST semantics;
+- future-leak và rolling-window contracts;
+- model target isolation và memory guard;
+- artifact hash/size tampering và exact dependencies;
+- API response schema, valid requests và invalid input paths.
+
+Reliability gate cuối cùng đã xác minh Python 3.11.9, 11 exact dependency pins, 38 report references và serving artifact thật. API smoke trả `200` cho `/health` và forecast hợp lệ, `422` cho `cutoff_utc` không hợp lệ.
+
+## Cấu trúc repository
+
+```text
+urbanflow-ai/
+├── configs/                  # Data, ETL, feature, model, API, reliability configs
+├── docs/
+│   ├── screenshots/          # Dashboard evidence
+│   ├── DATA_AND_EVALUATION.md
+│   ├── PROJECT_SPEC.md
+│   ├── TASK_BOARD.md
+│   ├── data-card.md
+│   └── model-card.md
+├── notebooks/                # Colab CPU training workflow
+├── scripts/
+│   ├── run_pipeline.ps1      # Sequential pipeline + reliability gate
+│   └── start_demo.ps1        # FastAPI + Vue launcher
+├── src/urbanflow/            # ETL, features, model, analysis, API, reliability
+├── tests/                    # Behavioral and contract tests
+├── web/                      # Vue 3 + TypeScript + Vite dashboard
+├── pyproject.toml
+└── README.md
 ```
 
-Launcher khóa host ở `127.0.0.1`, dùng port 8000/5173, đợi `/health` và Vite sẵn
-sàng trước khi mở browser. `Ctrl+C` dừng cả hai process tree. Hai chế độ kiểm tra:
+Raw data, processed data, model artifacts, caches, virtual environments và secrets nằm ngoài Git. Chỉ các tài liệu, config và sample nhỏ cần thiết cho tái lập được version control.
 
-```powershell
-# Kiểm tra Python/npm/dependencies/artifacts/checksum/schema/ports, không mở service
-powershell -ExecutionPolicy Bypass -File .\scripts\start_demo.ps1 -CheckOnly
+## Tài liệu
 
-# Khởi động hai service, kiểm tra API và Vite proxy HTTP 200, rồi tự dừng
-powershell -ExecutionPolicy Bypass -File .\scripts\start_demo.ps1 -SmokeTest
-```
+- [Product specification](docs/PROJECT_SPEC.md)
+- [Data and evaluation contract](docs/DATA_AND_EVALUATION.md)
+- [Data card](docs/data-card.md)
+- [Model card](docs/model-card.md)
+- [Six-week roadmap](docs/ROADMAP_6_WEEKS.md)
+- [Task board and measured execution log](docs/TASK_BOARD.md)
+- [AI workflow](docs/AI_WORKFLOW.md)
 
-#### Walkthrough demo
+<a id="scope"></a>
+## Phạm vi và giới hạn
 
-1. Xác nhận banner **Historical backtest — not a live operational forecast**, test
-   window và model version xuất hiện trước khi đọc số liệu.
-2. Chọn cutoff `2026-03-31 12:00 UTC`, nhấn **Apply snapshot**. Snapshot, ranking,
-   KPI và chart phải cùng chuyển về target hour này.
-3. Chọn **Times Sq/Theatre District** trong bảng top zones. Tại cutoff trên, demo
-   hiển thị prediction `113.1`, actual `86`; absolute error và rolling MAE được đọc
-   trực tiếp từ locked test predictions/cửa sổ history.
-4. Đọc chart: đường xanh liền là actual, đường amber đứt là forecast; đường dọc
-   đánh dấu giờ đang chọn. Bảng bên phải xếp zone theo prediction, không theo actual.
-5. Dùng zone selector để xem zone ngoài top 10; ranking vẫn giữ nguyên cho cutoff,
-   còn chart/KPI chuyển sang zone mới. Nhấn `Ctrl+C` tại terminal để dừng demo.
+- Kết quả chỉ mô tả historical backtest Q1/2026; chưa chứng minh khả năng tổng quát sang mùa hoặc năm khác.
+- `trip_count` là số lượt pickup được TLC ghi nhận, không phải toàn bộ nhu cầu đi lại hoặc nhu cầu chưa được phục vụ.
+- API phục vụ precomputed test predictions, không thực hiện online inference.
+- V1 chưa có weather, event, traffic, map geometry, uncertainty interval hoặc monitoring production.
+- Hourly source coverage chỉ phát hiện giờ mất hoàn toàn; không phát hiện mất dữ liệu một phần trong một giờ.
+- Query benchmark trực tiếp không bao gồm HTTP, browser rendering hoặc network latency.
 
-Ảnh demo desktop đã xác minh: [`docs/screenshots/w4-t3-dashboard.png`](docs/screenshots/w4-t3-dashboard.png).
-Dashboard chỉ đọc test artifacts Q1/2026; không ingest trip mới và không phải forecast
-production hoặc real time.
+---
 
-Kiểm tra pipeline bằng dữ liệu toy (không tải TLC):
-
-```powershell
-python -m pytest
-```
-
-## Đọc theo thứ tự
-
-1. [PROJECT_SPEC.md](docs/PROJECT_SPEC.md): mục tiêu, phạm vi, định nghĩa dự báo và tiêu chí hoàn thành.
-2. [ROADMAP_6_WEEKS.md](docs/ROADMAP_6_WEEKS.md): đầu việc từng tuần, đầu ra và cổng kiểm tra; có lịch rút xuống 4 tuần.
-3. [DATA_AND_EVALUATION.md](docs/DATA_AND_EVALUATION.md): nguồn dữ liệu, pipeline, chống rò rỉ dữ liệu và chỉ số.
-4. [AGENTS.md](AGENTS.md): hướng dẫn đặt vào gốc repo để Codex/agent đọc.
-5. [AI_WORKFLOW.md](docs/AI_WORKFLOW.md): cách dùng Codex, OMP và Orca theo từng phiên làm việc, mẫu prompt và bàn giao.
-6. [TASK_BOARD.md](docs/TASK_BOARD.md): danh sách task có thể giao ngay cho agent và mẫu báo cáo.
-
-## Chọn cấu hình ban đầu
-
-- Máy mục tiêu: Core i5, RAM 8GB, SSD 512GB; chạy CPU và chỉ một tác vụ nặng mỗi lần.
-- V1: 3 tháng Yellow Taxi liên tiếp đã phát hành, một lần lấy dữ liệu theo tháng rồi tổng hợp thành `zone × hour`; dùng DuckDB hoặc Polars lazy để tránh nạp toàn bộ raw vào RAM.
-- Mô hình: seasonal naive (cùng zone, cùng giờ tuần trước) → histogram gradient boosting hoặc XGBoost CPU nhỏ. Không cam kết model mới sẽ thắng baseline.
-- API: FastAPI; UI: Vue nếu đã quen, bảng và biểu đồ trước; dữ liệu phục vụ có thể đọc từ Parquet/SQLite. Không cần Docker, PostgreSQL/PostGIS, MLflow để hoàn thành V1.
-- Nếu tháng thứ ba chưa có dữ liệu hoặc chất lượng kém, chọn ba tháng liên tiếp khác và ghi lại lựa chọn trong data card.
-
-## Nguồn tham khảo chính
-
-- [NYC TLC Trip Record Data](https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page): bản Parquet, taxi zone lookup, hướng dẫn nguồn và các lưu ý chất lượng.
-- [NYC TLC Yellow Taxi Data Dictionary](https://www.nyc.gov/assets/tlc/downloads/pdf/data_dictionary_trip_records_yellow.pdf): trường pickup time và `PULocationID`.
-- [NYC Open Data Taxi Zones](https://data.cityofnewyork.us/Transportation/NYC-Taxi-Zones/8meu-9t5y): hình học zone cho phần bản đồ tùy chọn.
-- [Open-Meteo Historical Weather](https://open-meteo.com/en/docs/historical-weather-api) và [Historical Forecast](https://open-meteo.com/en/docs/historical-forecast-api): chỉ dùng nếu mở rộng weather và phải phân biệt quan trắc lịch sử với dự báo biết trước thời điểm dự đoán.
-- [Orca Docs](https://www.onorca.dev/): IDE chạy các agent CLI trong terminal/worktree.
-
-Các lệnh cài đặt cụ thể cho Codex/OMP/Orca thay đổi theo phiên bản; trong bộ tài liệu chỉ mô tả cách phối hợp độc lập phiên bản. Kiểm tra tài liệu chính thức của phiên bản đang cài trước khi cấu hình.
+<p align="center">
+  <strong>UrbanFlow AI</strong><br>
+  Built for reproducible forecasting, transparent evaluation, and an honest historical demo.
+</p>
