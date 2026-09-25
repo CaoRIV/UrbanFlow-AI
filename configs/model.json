@@ -7,8 +7,8 @@
   "metrics_path": "../artifacts/model/metrics.json",
   "seed": 42,
   "threads": 2,
-  "minimum_available_memory_mb": 2048,
-  "maximum_process_rss_mb": 4096,
+  "minimum_available_memory_mb": 256,
+  "maximum_process_rss_mb": 1024,
   "max_boost_rounds": 500,
   "early_stopping_rounds": 30,
   "candidates": [

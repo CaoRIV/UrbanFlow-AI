@@ -24,11 +24,11 @@ Quy ước: `[ ]` chưa làm, `[x]` xong sau khi đã kiểm tra. Giao một mã
 
 - [x] **W4-T1** — FastAPI `GET /health`, `GET /zones`, `GET /forecast?cutoff_utc=...&zone_id=...`; response có `target_hour_utc`, `prediction`, `model_version`, nguồn backtest. Test input lỗi.
 - [x] **W4-T2** — Vue trang demo: chọn cutoff test, top zones, line chart prediction/actual, MAE và chú thích historical backtest.
-- [ ] **W4-T3** — README end-to-end, script chạy API/UI, screenshot và walkthrough demo.
+- [x] **W4-T3** — README end-to-end, script chạy API/UI, screenshot và walkthrough demo.
 
 ## Tuần 5–6 (nếu có)
 
-- [ ] **W5-T1** — Chạy lại pipeline từ đầu và kiểm tra dependency, error path, kích thước artifact; tối ưu chỗ chậm có đo đạc.
+- [x] **W5-T1** — Chạy lại pipeline từ đầu và kiểm tra dependency, error path, kích thước artifact; tối ưu chỗ chậm có đo đạc.
 - [ ] **W5-T2** — Viết hướng dẫn tái lập và CV bullets có số liệu **thực** từ test.
 - [ ] **W6-T1** — Chọn đúng một extension: weather forecast có timestamp khả dụng, map zone, residual anomaly, hoặc CI; viết tiêu chí trước khi làm.
 - [ ] **W6-T2** — So sánh extension cùng split/baseline; cập nhật README, model card, demo.
@@ -263,3 +263,57 @@ Vấn đề còn lại / quyết định:
   contrast tính trực tiếp là `4.685:1`, đạt WCAG AA cho text thường.
 - Giới hạn: dashboard chỉ đọc locked Q1/2026 test artifacts. Task tiếp theo W4-T3
   hoàn thiện script chạy chung và walkthrough end-to-end.
+
+### W4-T3 — 2026-09-24
+
+- Trạng thái: hoàn thành, chưa commit.
+- Thêm `scripts/start_demo.ps1`: một lệnh chạy đúng `.venv` Python cho FastAPI và
+  Vite trên loopback 8000/5173, đợi health trước khi mở browser và dừng cả hai
+  process tree trong `finally`. Launcher không tự cài dependency hoặc tải dữ liệu.
+- `-CheckOnly` kiểm tra Python/npm/node_modules, ba artifact trong `configs/api.json`,
+  load `PredictionStore` để xác minh checksum/schema và bảo đảm hai port trống.
+  `-SmokeTest` khởi động thật API/UI, kiểm tra direct `/health`, Vite proxy `/api/health`
+  và HTML dashboard, rồi tự cleanup.
+- README có bảng metric baseline/model đã khóa, prerequisites, lệnh chạy một dòng,
+  preflight/smoke commands, walkthrough cutoff/zone và giới hạn historical backtest.
+- `-CheckOnly` pass với model `xgboost_bed2c66982d2`, 100.992 predictions, 263 zones;
+  `-SmokeTest` xác nhận API và proxy HTTP 200. Chạy lại `-CheckOnly` sau cleanup pass,
+  chứng minh port 8000/5173 đã được giải phóng.
+- Chromium chạy qua chính launcher: `/health`, `/zones`, `/rankings`, `/history` đều
+  200; cutoff `2026-03-31T12:00Z` + zone 230 hiển thị Times Sq/Theatre District,
+  prediction `113.1`, actual `86`, không có page/request error.
+- Ảnh desktop 1440 px lưu tại `docs/screenshots/w4-t3-dashboard.png`. Mobile 375 px
+  giữ `scrollWidth = clientWidth = 375`, đủ bốn KPI; axe-core có 0 violations và
+  1 manual-review item cho SVG chart labels (contrast đã kiểm tra ở W4-T2).
+- `npm run build` thành công (1.880 modules); `tests/test_api.py` — 3 passed.
+- Giới hạn: launcher yêu cầu artifacts W3 và dependencies đã cài; dashboard vẫn chỉ
+  đọc locked Q1/2026 test predictions, không phải forecast production hoặc real time.
+
+### W5-T1 — 2026-09-25
+
+- Trạng thái: hoàn thành, chưa tạo commit trong task này.
+- Thêm `urbanflow.reliability`, `configs/reliability.json` và
+  `scripts/run_pipeline.ps1`: kiểm tra exact Python/dependency pins + imports,
+  `pip check`, chạy 8 stage tuần tự, ghi stage logs/run report, hỗ trợ `-StartStage`
+  để retry đúng stage lỗi và `-VerifyOnly` để kiểm tra artifact hiện có.
+- Failure paths đã chạy thật: checker bắt dependency model còn thiếu dù `pip check`
+  cũ pass; runner dừng ở model memory guard và in stage/log rõ ràng. Sau khi đo,
+  guard được hiệu chỉnh còn 256 MiB RAM khả dụng tối thiểu và 1 GiB process RSS;
+  lần train cuối dùng 2 threads, 55.088 giây, RSS đỉnh 349.003.776 bytes và RAM
+  khả dụng thấp nhất 969.027.584 bytes.
+- Pipeline được chạy lại tuần tự từ raw cache qua EDA, aggregate, full grid,
+  baseline, feature, train và error analysis. Lần đầu hoàn tất stage 0–5 rồi dừng
+  đúng ở guard; các lần resume chỉ chạy lại stage lỗi/phụ thuộc sau nó. Run report
+  cuối ghi resume từ stage 6 trong 58.679 giây; report chain cuối pass 38 references.
+- Rerun giữ cả `depth4`/`depth6` vì `depth6` vẫn thắng validation; model phục vụ
+  `xgboost_bd51e85845a0` đạt validation MAE/WAPE `4.204104`/`0.202812`, test
+  `3.755908`/`0.190706`, tốt hơn baseline test `19.6649%` trên cùng split.
+- Footprint: 44 files, 208.863.175 bytes; raw 190.761.304, processed 4.925.483,
+  artifacts 13.176.388 bytes. Direct PredictionStore median cho forecast/history/
+  rankings là 2.756/4.696/3.199 ms (10 runs), nên không thêm cache.
+- API artifact thật: `/health` và forecast zone 161 trả 200 với model mới; input
+  `cutoff_utc=bad` trả 422. Full suite 36 passed; reliability failure tests 2 passed;
+  `-VerifyOnly` pass với Python 3.11.9 và 11 exact dependency pins.
+- Giới hạn: benchmark query không gồm HTTP/browser overhead; pipeline là historical
+  backtest Q1/2026 và vẫn cần raw/artifacts ngoài git. Task tiếp theo: W5-T2.
+

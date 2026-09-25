@@ -16,6 +16,26 @@ python -m pytest
 
 Smoke test tạo một bảng Arrow nhỏ và xác minh DuckDB aggregate đúng kết quả. Bước này không tải hoặc tạo dữ liệu TLC.
 
+### Chạy lại pipeline và reliability gate
+
+Runner W5-T1 kiểm tra exact dependency pins/imports, `pip check`, rồi chạy tuần tự
+download/verify → EDA → aggregate → grid → baseline → features → train → analysis:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_pipeline.ps1
+
+# Chỉ xác minh environment, report hashes/sizes, artifact footprint và serving store
+powershell -ExecutionPolicy Bypass -File .\scripts\run_pipeline.ps1 -VerifyOnly
+
+# Tiếp tục từ train sau khi một stage trước đã hoàn tất (stage index 0..7)
+powershell -ExecutionPolicy Bypass -File .\scripts\run_pipeline.ps1 -StartStage 6
+```
+
+Mỗi stage ghi log riêng trong `artifacts/reliability/logs/`; run report nằm tại
+`artifacts/reliability/pipeline-run.json`, còn báo cáo tổng hợp nằm tại
+`artifacts/reliability/w5-t1-report.json`. Runner dừng ngay khi dependency, stage,
+checksum, size, schema hoặc API-store validation thất bại.
+
 ## Tải dữ liệu thô
 
 Cấu hình W2-T1 chọn ba tháng Yellow Taxi liên tiếp cùng taxi zone lookup. Từ repository root:
@@ -99,15 +119,15 @@ toàn bộ lịch sử không NULL; lịch sử thiếu được giữ NULL, kh�
 `artifacts/features/feature-report.json` lưu schema, hash, số hàng usable theo
 split và tài nguyên chạy.
 
-Train model CPU bằng `configs/model.json`. Lệnh có memory guard và sẽ dừng trước
-khi train nếu RAM khả dụng dưới 2 GB:
+Train model CPU bằng `configs/model.json`. Memory guard đã được hiệu chỉnh theo lần
+chạy đo đạc: dừng nếu RAM khả dụng dưới 256 MiB hoặc process RSS vượt 1 GiB:
 
 ```powershell
 python -m urbanflow.train_model --config configs/model.json
 ```
 
-Với máy 8 GB không đủ RAM khi Orca đang mở, tạo bundle Colab rồi chạy notebook
-`notebooks/train_model_colab.ipynb` trên CPU runtime:
+Nếu máy không giữ được memory guard khi Orca hoặc ứng dụng khác đang mở, tạo bundle
+Colab rồi chạy notebook `notebooks/train_model_colab.ipynb` trên CPU runtime:
 
 ```powershell
 python -m urbanflow.prepare_colab --config configs/model.json
@@ -117,17 +137,16 @@ Upload `artifacts/colab/urbanflow-colab-input.zip` trong cell đầu tiên. Note
 xác minh checksum, tạo Python 3.11 environment, chạy model tests và full suite trước
 khi train, sau đó tải về `urbanflow-model-artifacts.zip`.
 
-Kết quả W3-T2 trên cùng split Q1/2026 chọn `depth6` bằng validation MAE:
-`4.226789` (WAPE `0.203907`), tốt hơn candidate `depth4` có MAE
-`4.367897`. Sau khi khóa cấu hình và fit lại trên train + validation, test đạt
-MAE `3.766444`, WAPE `0.191241`; seasonal-naive baseline tương ứng là MAE
-`4.675301`, WAPE `0.237388` (cải thiện tương đối `19.4395%`). Model version
-`xgboost_bed2c66982d2` dùng seed 42, 2 threads và 305 boost rounds. Artifacts
-nằm trong `artifacts/model/`; đây vẫn là historical backtest, không phải forecast
-production hoặc bằng chứng chất lượng ngoài Q1/2026.
+Kết quả rerun W5-T1 trên cùng split Q1/2026 và dependency pins hiện tại chọn
+`depth6` bằng validation MAE `4.204104` (WAPE `0.202812`), 431 boost rounds.
+Sau khi fit lại trên train + validation, test đạt MAE `3.755908`, WAPE `0.190706`;
+seasonal-naive baseline tương ứng là MAE `4.675301`, WAPE `0.237388` (cải thiện
+tương đối `19.6649%`). Model version `xgboost_bd51e85845a0` dùng seed 42 và 2
+threads. Artifacts nằm trong `artifacts/model/`; đây vẫn là historical backtest,
+không phải forecast production hoặc bằng chứng chất lượng ngoài Q1/2026.
 
-Phân tích lỗi W3-T3 kiểm tra schema, checksum và khóa/actual giữa model với
-baseline trước khi tính lại metric trực tiếp từ predictions:
+Phân tích lỗi kiểm tra schema, checksum và khóa/actual giữa model với baseline trước
+khi tính lại metric trực tiếp từ predictions:
 
 ```powershell
 python -m urbanflow.analyze_model --config configs/model_analysis.json
@@ -135,13 +154,20 @@ python -m urbanflow.analyze_model --config configs/model_analysis.json
 
 Báo cáo machine-readable được ghi vào `artifacts/model/error-analysis.json`;
 [model card](docs/model-card.md) ghi protocol chọn candidate, test comparison,
-residual, zone/hour yếu, provenance và giới hạn. Trên 100.992 test rows, model
-tốt hơn baseline tại 214/263 zones và kém hơn tại 49 zones. Model overpredict
-62.948 rows, underpredict 33.784 rows; 4.382 raw predictions âm được clip về 0.
-Zone regression lớn nhất là Battery Park City (model MAE `6.492402`, baseline
-`6.195312`). Vì model vẫn giảm test MAE từ `4.675301` xuống `3.766444`, artifact
-phục vụ được khóa ở `xgboost_bed2c66982d2`. Test chỉ quyết định artifact phục vụ,
-không được dùng để đổi feature, candidate hoặc boost rounds.
+residual, zone/hour yếu, provenance và giới hạn. Test chỉ quyết định artifact phục
+vụ; không được dùng để đổi feature, candidate hoặc boost rounds.
+
+### Kết quả đánh giá đã khóa
+
+| Artifact | Validation MAE | Validation WAPE | Test MAE | Test WAPE |
+| --- | ---: | ---: | ---: | ---: |
+| Seasonal naive 168h | 6.397990 | 0.308649 | 4.675301 | 0.237388 |
+| XGBoost `xgboost_bd51e85845a0` | 4.204104 | 0.202812 | 3.755908 | 0.190706 |
+
+Model được chọn bằng validation; test chỉ chạy cho cấu hình đã khóa. Test MAE giảm
+`19.6649%` so với seasonal naive trên cùng 100.992 hàng và cùng split thời gian.
+Các số liệu chỉ mô tả historical backtest Q1/2026, không chứng minh chất lượng live
+hoặc khả năng tổng quát sang mùa khác.
 
 Khởi động API W4-T1 từ repository root sau khi đã tạo error-analysis report:
 
@@ -171,11 +197,11 @@ và luôn gắn `source = historical_backtest`. Ví dụ response:
   "borough": "Manhattan",
   "zone_name": "Midtown Center",
   "service_zone": "Yellow Zone",
-  "prediction": 25.38193702697754,
+  "prediction": 23.633546829223633,
   "actual_trip_count": 18,
-  "absolute_error": 7.381937026977539,
+  "absolute_error": 5.633546829223633,
   "model_name": "xgboost_hist_cpu",
-  "model_version": "xgboost_bed2c66982d2"
+  "model_version": "xgboost_bd51e85845a0"
 }
 ```
 
@@ -183,33 +209,52 @@ Khi startup, API đối chiếu serving decision, SHA-256 của predictions/zone
 schema, test window, full-grid dimensions và khóa duy nhất trước khi nhận request.
 API đọc prediction đã khóa bằng DuckDB; không load XGBoost hoặc train lại model.
 
-### Chạy dashboard Vue W4-T2
+### Chạy demo end-to-end W4-T3
 
-Giữ API ở terminal thứ nhất bằng đúng Python trong virtual environment:
-
-```powershell
-./.venv/Scripts/python.exe -m uvicorn urbanflow.api:app --host 127.0.0.1 --port 8000
-```
-
-Chạy Vite ở terminal thứ hai; dev server proxy `/api` sang FastAPI tại port 8000:
+Yêu cầu: Python 3.11 environment đã cài theo phần đầu README, Node.js 22+, artifact
+model hiện tại trong `artifacts/model/`, taxi zone lookup trong `data/raw/`, và một
+lần cài frontend dependency:
 
 ```powershell
 cd web
 npm install
-npm run dev
+cd ..
 ```
 
-Mở `http://127.0.0.1:5173`. Dashboard khởi tạo tại giờ cuối của test window,
-cho phép chọn cutoff UTC và zone, hiển thị top 10 zones, chart 24 giờ forecast/actual,
-prediction, actual, absolute error và rolling MAE. Banner `Historical backtest` luôn
-hiển thị để tránh diễn giải thành forecast live. Kiểm tra TypeScript và production build:
+Từ repository root, chạy một lệnh để khởi động FastAPI, Vite và mở dashboard:
 
 ```powershell
-cd web
-npm run build
+powershell -ExecutionPolicy Bypass -File .\scripts\start_demo.ps1
 ```
 
-Ảnh demo desktop: [`docs/screenshots/w4-t2-dashboard.png`](docs/screenshots/w4-t2-dashboard.png).
+Launcher khóa host ở `127.0.0.1`, dùng port 8000/5173, đợi `/health` và Vite sẵn
+sàng trước khi mở browser. `Ctrl+C` dừng cả hai process tree. Hai chế độ kiểm tra:
+
+```powershell
+# Kiểm tra Python/npm/dependencies/artifacts/checksum/schema/ports, không mở service
+powershell -ExecutionPolicy Bypass -File .\scripts\start_demo.ps1 -CheckOnly
+
+# Khởi động hai service, kiểm tra API và Vite proxy HTTP 200, rồi tự dừng
+powershell -ExecutionPolicy Bypass -File .\scripts\start_demo.ps1 -SmokeTest
+```
+
+#### Walkthrough demo
+
+1. Xác nhận banner **Historical backtest — not a live operational forecast**, test
+   window và model version xuất hiện trước khi đọc số liệu.
+2. Chọn cutoff `2026-03-31 12:00 UTC`, nhấn **Apply snapshot**. Snapshot, ranking,
+   KPI và chart phải cùng chuyển về target hour này.
+3. Chọn **Times Sq/Theatre District** trong bảng top zones. Tại cutoff trên, demo
+   hiển thị prediction `113.1`, actual `86`; absolute error và rolling MAE được đọc
+   trực tiếp từ locked test predictions/cửa sổ history.
+4. Đọc chart: đường xanh liền là actual, đường amber đứt là forecast; đường dọc
+   đánh dấu giờ đang chọn. Bảng bên phải xếp zone theo prediction, không theo actual.
+5. Dùng zone selector để xem zone ngoài top 10; ranking vẫn giữ nguyên cho cutoff,
+   còn chart/KPI chuyển sang zone mới. Nhấn `Ctrl+C` tại terminal để dừng demo.
+
+Ảnh demo desktop đã xác minh: [`docs/screenshots/w4-t3-dashboard.png`](docs/screenshots/w4-t3-dashboard.png).
+Dashboard chỉ đọc test artifacts Q1/2026; không ingest trip mới và không phải forecast
+production hoặc real time.
 
 Kiểm tra pipeline bằng dữ liệu toy (không tải TLC):
 

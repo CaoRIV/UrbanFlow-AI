@@ -2,8 +2,8 @@
 
 ## Trạng thái và quyết định phục vụ
 
-- **Model được chọn:** `xgboost_bed2c66982d2` (`xgboost_hist_cpu`).
-- **Quyết định:** Phục vụ xgboost_bed2c66982d2 vì locked-test MAE 3.766444 thấp hơn seasonal-naive MAE 4.675301; test không được dùng để đổi feature, candidate parameters hoặc boost rounds.
+- **Model được chọn:** `xgboost_bd51e85845a0` (`xgboost_hist_cpu`).
+- **Quyết định:** Phục vụ xgboost_bd51e85845a0 vì locked-test MAE 3.755908 thấp hơn seasonal-naive MAE 4.675301; test không được dùng để đổi feature, candidate parameters hoặc boost rounds.
 - **Bối cảnh:** historical backtest, không phải dự báo production hoặc real time.
 
 ## Mục đích
@@ -24,69 +24,69 @@ không được diễn giải như quan hệ nhân quả.
 
 | Candidate | Rounds | MAE | WAPE |
 | --- | --- | --- | --- |
-| `depth4` | 212 | 4.367897 | 0.210714 |
-| `depth6` | 305 | 4.226789 | 0.203907 |
+| `depth4` | 196 | 4.384689 | 0.211524 |
+| `depth6` | 431 | 4.204104 | 0.202812 |
 
 ## Kết quả test đã khóa
 
 | Model | MAE | WAPE | Mean signed error |
 | --- | --- | --- | --- |
-| XGBoost `xgboost_bed2c66982d2` | 3.766444 | 0.191241 | 0.707752 |
+| XGBoost `xgboost_bd51e85845a0` | 3.755908 | 0.190706 | 0.701036 |
 | Seasonal naive `seasonal_naive_168h_v1` | 4.675301 | 0.237388 | 1.020695 |
 
-XGBoost cải thiện MAE tương đối **19.4395%** và WAPE tương đối **19.4395%** so với baseline.
+XGBoost cải thiện MAE tương đối **19.6649%** và WAPE tương đối **19.6649%** so với baseline.
 
 ## Phân tích residual
 
-- XGBoost underpredict 33,784 rows (33.45%), overpredict 62,948 rows (62.33%).
-- Raw prediction âm: 4,382 rows (4.34%).
-- Absolute-error p50/p90/p95/p99: 0.866 / 8.748 / 17.723 / 47.928.
-- Theo MAE, model tốt hơn baseline tại 214 zones, hòa tại 0 và kém hơn tại 49 zones.
+- XGBoost underpredict 33,673 rows (33.34%), overpredict 62,430 rows (61.82%).
+- Raw prediction âm: 5,093 rows (5.04%).
+- Absolute-error p50/p90/p95/p99: 0.872 / 8.706 / 17.526 / 47.800.
+- Theo MAE, model tốt hơn baseline tại 215 zones, hòa tại 0 và kém hơn tại 48 zones.
 
 ## Zone có MAE model cao nhất
 
 | Zone | Borough | Model MAE | Baseline MAE | Δ MAE baseline-model |
 | --- | --- | --- | --- | --- |
-| 161 — Midtown Center | Manhattan | 35.287481 | 39.247396 | 3.959915 |
-| 132 — JFK Airport | Queens | 34.613680 | 43.671875 | 9.058195 |
-| 138 — LaGuardia Airport | Queens | 28.833930 | 46.786458 | 17.952529 |
-| 237 — Upper East Side South | Manhattan | 27.878784 | 37.505208 | 9.626424 |
-| 186 — Penn Station/Madison Sq West | Manhattan | 27.835307 | 33.458333 | 5.623027 |
-| 236 — Upper East Side North | Manhattan | 26.515405 | 41.346354 | 14.830949 |
-| 142 — Lincoln Square East | Manhattan | 26.464732 | 33.742188 | 7.277456 |
-| 230 — Times Sq/Theatre District | Manhattan | 23.378067 | 25.687500 | 2.309433 |
-| 162 — Midtown East | Manhattan | 21.386547 | 27.065104 | 5.678557 |
-| 79 — East Village | Manhattan | 20.992636 | 23.898438 | 2.905802 |
+| 161 — Midtown Center | Manhattan | 35.257822 | 39.247396 | 3.989574 |
+| 132 — JFK Airport | Queens | 34.227469 | 43.671875 | 9.444406 |
+| 138 — LaGuardia Airport | Queens | 29.022421 | 46.786458 | 17.764037 |
+| 186 — Penn Station/Madison Sq West | Manhattan | 27.693353 | 33.458333 | 5.764980 |
+| 237 — Upper East Side South | Manhattan | 27.484579 | 37.505208 | 10.020629 |
+| 142 — Lincoln Square East | Manhattan | 26.629784 | 33.742188 | 7.112403 |
+| 236 — Upper East Side North | Manhattan | 26.204098 | 41.346354 | 15.142257 |
+| 230 — Times Sq/Theatre District | Manhattan | 23.122221 | 25.687500 | 2.565279 |
+| 162 — Midtown East | Manhattan | 21.329137 | 27.065104 | 5.735968 |
+| 79 — East Village | Manhattan | 20.785054 | 23.898438 | 3.113384 |
 
 ## Zone model kém baseline nhiều nhất
 
 | Zone | Borough | Model MAE | Baseline MAE | Δ MAE baseline-model |
 | --- | --- | --- | --- | --- |
-| 13 — Battery Park City | Manhattan | 6.492402 | 6.195312 | -0.297090 |
-| 109 — Great Kills | Staten Island | 0.165300 | 0.036458 | -0.128842 |
-| 44 — Charleston/Tottenville | Staten Island | 0.135408 | 0.007812 | -0.127596 |
-| 99 — Freshkills Park | Staten Island | 0.130859 | 0.005208 | -0.125651 |
-| 84 — Eltingville/Annadale/Prince's Bay | Staten Island | 0.141217 | 0.015625 | -0.125592 |
-| 2 — Jamaica Bay | Queens | 0.139575 | 0.015625 | -0.123950 |
-| 103 — Governor's Island/Ellis Island/Liberty Island | Manhattan | 0.123947 | 0.000000 | -0.123947 |
-| 104 — Governor's Island/Ellis Island/Liberty Island | Manhattan | 0.123947 | 0.000000 | -0.123947 |
-| 105 — Governor's Island/Ellis Island/Liberty Island | Manhattan | 0.123947 | 0.000000 | -0.123947 |
-| 110 — Great Kills Park | Staten Island | 0.123947 | 0.000000 | -0.123947 |
+| 13 — Battery Park City | Manhattan | 6.441898 | 6.195312 | -0.246586 |
+| 103 — Governor's Island/Ellis Island/Liberty Island | Manhattan | 0.191552 | 0.000000 | -0.191552 |
+| 104 — Governor's Island/Ellis Island/Liberty Island | Manhattan | 0.191552 | 0.000000 | -0.191552 |
+| 105 — Governor's Island/Ellis Island/Liberty Island | Manhattan | 0.191552 | 0.000000 | -0.191552 |
+| 110 — Great Kills Park | Staten Island | 0.191552 | 0.000000 | -0.191552 |
+| 199 — Rikers Island | Bronx | 0.191552 | 0.000000 | -0.191552 |
+| 44 — Charleston/Tottenville | Staten Island | 0.189747 | 0.007812 | -0.181935 |
+| 99 — Freshkills Park | Staten Island | 0.186412 | 0.005208 | -0.181203 |
+| 84 — Eltingville/Annadale/Prince's Bay | Staten Island | 0.194750 | 0.015625 | -0.179125 |
+| 5 — Arden Heights | Staten Island | 0.168137 | 0.005208 | -0.162929 |
 
 ## UTC hours có MAE model cao nhất
 
 | UTC hour | Model MAE | Baseline MAE | Δ MAE baseline-model |
 | --- | --- | --- | --- |
-| 6 | 6.110481 | 6.683460 | 0.572980 |
-| 9 | 5.602322 | 6.317728 | 0.715406 |
-| 5 | 5.186824 | 7.077234 | 1.890410 |
-| 4 | 5.075725 | 7.439401 | 2.363676 |
-| 8 | 5.073375 | 7.308222 | 2.234848 |
-| 10 | 4.938063 | 5.227186 | 0.289123 |
-| 7 | 4.634389 | 6.668726 | 2.034338 |
-| 3 | 4.411348 | 5.998574 | 1.587226 |
-| 20 | 4.383458 | 4.562738 | 0.179280 |
-| 19 | 4.267687 | 4.894724 | 0.627037 |
+| 6 | 6.006200 | 6.683460 | 0.677260 |
+| 9 | 5.695166 | 6.317728 | 0.622562 |
+| 5 | 5.269975 | 7.077234 | 1.807258 |
+| 4 | 5.110567 | 7.439401 | 2.328834 |
+| 8 | 5.060444 | 7.308222 | 2.247779 |
+| 10 | 4.856145 | 5.227186 | 0.371042 |
+| 7 | 4.616581 | 6.668726 | 2.052145 |
+| 20 | 4.457345 | 4.562738 | 0.105392 |
+| 3 | 4.437320 | 5.998574 | 1.561255 |
+| 19 | 4.339955 | 4.894724 | 0.554770 |
 
 ## Tái lập và provenance
 
@@ -94,11 +94,11 @@ XGBoost cải thiện MAE tương đối **19.4395%** và WAPE tương đối **
 python -m urbanflow.analyze_model --config configs/model_analysis.json
 ```
 
-- Model SHA-256: `bed2c66982d253e0d05e2f97d7afbc318c87498f3a64174c53411a264ffd3ea2`.
-- Model predictions SHA-256: `a57f20cb6f5d9e2fcf44b604058dbd7d85a9b7a1f292854053d0d37be89283e3`.
+- Model SHA-256: `bd51e85845a086fb15adc47a2a3329092af1262d72595f3ef1b38e5c2154b8bb`.
+- Model predictions SHA-256: `052f3b1c3409ea3f13379c2174eb09625d011f2de216f9768b8d6745f0ef0336`.
 - Baseline predictions SHA-256: `1b11400cad16f56e3819c487799bd8511fdd2b80b4ff4f0942a75c6f745c0128`.
-- Error-analysis report SHA-256: `7dca0a4d053a3298648736beb43bf32d1f3b4d0847da67b48b5bca0393dd3cf9`.
-- Train resources: 2 threads, 50.892s, RSS peak 451,014,656 bytes.
+- Error-analysis report SHA-256: `948bb2eca74019ab12396e9a46133762c9cd0f5c9a4d201a623c4042d34a79fc`.
+- Train resources: 2 threads, 55.088s, RSS peak 349,003,776 bytes.
 
 ## Giới hạn
 
